@@ -1,0 +1,69 @@
+{
+  "name": "dsh-subscription-search",
+  "version": "0.1.0",
+  "description": "ChatGPT/Grok subscription OAuth login, model routes, and ChatGPT → Grok → Exa → DeepSeek web-search fallback for DeepSeek Harness.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "dsh-subscription-search": "bin/install.js"
+  },
+  "files": [
+    "bin/install.js",
+    "cordis.patch.yml",
+    "lib/index.js",
+    "lib/client.js",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check lib/index.js && node --check lib/client.js && node --check bin/install.js && node --test"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shaomingbo/dsh-subscription-search.git"
+  },
+  "homepage": "https://github.com/shaomingbo/dsh-subscription-search#readme",
+  "bugs": {
+    "url": "https://github.com/shaomingbo/dsh-subscription-search/issues"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "cordis",
+    "chatgpt",
+    "grok",
+    "xai",
+    "oauth",
+    "subscription",
+    "web-search"
+  ],
+  "author": "shaomingbo",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-ai": "^0.82.1"
+  }
+}
