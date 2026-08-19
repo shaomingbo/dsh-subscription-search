@@ -1,6 +1,6 @@
 {
   "name": "dsh-subscription-search",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "ChatGPT/Grok subscription OAuth login, model routes, and ChatGPT → Grok → Exa → DeepSeek web-search fallback for DeepSeek Harness.",
   "type": "module",
   "main": "lib/index.js",

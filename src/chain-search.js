@@ -8,7 +8,7 @@
  * a bounded, secret-free error.
  */
 
-const USER_AGENT = 'dsh-subscription-search/0.1.1'
+const USER_AGENT = 'dsh-subscription-search/0.1.2'
 
 const CHATGPT_BASE_URL = 'https://chatgpt.com/backend-api/codex'
 const CHATGPT_MODEL = 'gpt-5.6-sol'
