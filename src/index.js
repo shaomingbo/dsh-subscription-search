@@ -149,7 +149,7 @@ export function apply(ctx) {
   // Loopback-only subscription channel consumed by the client section.
   ctx.connection.rpc.handle(CHANNEL, async (endpoint, payload, signal) => {
     try {
-      if (endpoint === 'providers') return success(auth.providers())
+      if (endpoint === 'providers') return success({ providers: auth.providers() })
       if (endpoint === 'start-login') {
         const { provider } = requireObject(payload)
         return success({ challenge: await auth.startLogin(provider, signal) })

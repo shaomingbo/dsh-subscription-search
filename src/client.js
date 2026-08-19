@@ -58,10 +58,10 @@ window.__ModuleLoader__.load({
           try {
             const [authResult, credResult] = await Promise.all([
               props.connection.rpc.call(CHANNEL, 'providers', {}),
-              props.connection.rpc.call('/credentials', 'describe', { refs: ['EXA_API_KEY', 'DEEPSEEK_API_KEY'] }),
+              props.connection.api.credentials.describe({ refs: ['EXA_API_KEY', 'DEEPSEEK_API_KEY'] }),
             ])
             if (!authResult.ok) throw new Error(authResult.error.message)
-            const credentials = credResult.ok ? credResult.value.credentials : {}
+            const credentials = credResult.result.ok ? credResult.result.value.credentials : {}
             const authProviders = authResult.value.providers
             store.update({
               status: 'ready',
@@ -84,7 +84,7 @@ window.__ModuleLoader__.load({
         return h('p', null, 'Loading search provider status…')
       }
       if (state.status === 'load-failed') {
-        return h('p', null, 'Failed to load search provider status.')
+        return h('p', { style: errorStyle }, state.error ?? 'Failed to load search provider status.')
       }
 
       const subscription = state.providers.filter(p => p.kind === 'subscription')
@@ -132,8 +132,8 @@ window.__ModuleLoader__.load({
             onClick: async () => {
               setSaving(true)
               try {
-                const result = await props.connection.rpc.call('/credentials', 'set', { ref: 'EXA_API_KEY', value: exaDraft })
-                if (!result.ok) throw new Error(result.error.message)
+                const result = await props.connection.api.credentials.set({ ref: 'EXA_API_KEY', value: exaDraft })
+                if (!result.result.ok) throw new Error(result.result.error.message)
                 setExaDraft('')
                 store.update({ exaConfigured: true })
                 state.providers = state.providers.map(p => p.id === 'exa' ? { ...p, configured: true } : p)
