@@ -1,6 +1,6 @@
 {
   "name": "dsh-subscription-search",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ChatGPT/Grok subscription OAuth login, model routes, and ChatGPT → Grok → Exa → DeepSeek web-search fallback for DeepSeek Harness.",
   "type": "module",
   "main": "lib/index.js",
@@ -16,15 +16,14 @@
   "files": [
     "bin/install.js",
     "cordis.patch.yml",
-    "lib/index.js",
-    "lib/client.js",
+    "lib",
     "README.md",
     "README.zh.md",
     "LICENSE"
   ],
   "scripts": {
     "test": "node --test",
-    "check": "node --check lib/index.js && node --check lib/client.js && node --check bin/install.js && node --test"
+    "check": "node --check lib/*.js && node --check bin/install.js && node --test"
   },
   "dsh": {
     "bundle": {

@@ -25,7 +25,7 @@
 ## 安装
 
 ```bash
-npx --yes github:shaomingbo/dsh-subscription-search#v0.1.0
+npx --yes github:shaomingbo/dsh-subscription-search#v0.1.1
 ```
 
 安装器会：
@@ -42,7 +42,7 @@ npx --yes github:shaomingbo/dsh-subscription-search#v0.1.0
 官方插件路径的替代安装：
 
 ```bash
-dsh plugin --profile web add github:shaomingbo/dsh-subscription-search#v0.1.0
+dsh plugin --profile web add github:shaomingbo/dsh-subscription-search#v0.1.1
 ```
 
 ## 工作原理
@@ -77,7 +77,7 @@ dsh plugin --profile web add github:shaomingbo/dsh-subscription-search#v0.1.0
 
 | 变量 | 默认值 | 用途 |
 |---|---|---|
-| `DSH_SUBSCRIPTION_SEARCH_SOURCE` | `github:shaomingbo/dsh-subscription-search#v0.1.0` | 安装器包来源 |
+| `DSH_SUBSCRIPTION_SEARCH_SOURCE` | `github:shaomingbo/dsh-subscription-search#v0.1.1` | 安装器包来源 |
 | `DSH_HOME` | `~/.dsh` | Harness 主目录；`.oauth.json` 位于此处 |
 
 ## 安全说明
