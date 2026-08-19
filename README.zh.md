@@ -33,7 +33,9 @@ npx --yes github:shaomingbo/dsh-subscription-search#v0.1.0
 1. 把本包加入 `~/.dsh/profiles/web/package.json`；
 2. 把 `dsh-subscription-search` 加入该 profile 的 `dsh.profile.bundles` 列表；
 3. 从 bundle 栈移除已被取代的 `dsh-codex-auth-bridge` 和 `dsh-grok-build-auth-bridge`；
-4. 在 profile 目录运行 `pnpm install`。
+4. 从 `~/.dsh/settings.yaml` 移除 bridge 所有的 `grok-build` / `openai-codex` 路由（你的其他提供方不受影响）；
+5. 移除 profile `node_modules` 中指向 DSH 工作区 checkout 的符号链接（checkout 版的 Models 页会调用发布版 Host 不存在的 `providerAuth` RPC）；
+6. 在 profile 目录运行 `pnpm install`。
 
 重启 `npx @deepseek-ai/dsh web`，打开 **设置 → 搜索**，用 ChatGPT 和 Grok 登录。模型选择器随后会列出 ChatGPT 模型和 `grok-4.6`；`web_search` 按链顺序尝试。
 

@@ -33,7 +33,9 @@ The installer:
 1. adds this package to `~/.dsh/profiles/web/package.json`;
 2. adds `dsh-subscription-search` to that profile's `dsh.profile.bundles` list;
 3. removes the superseded `dsh-codex-auth-bridge` and `dsh-grok-build-auth-bridge` from the bundle stack;
-4. runs `pnpm install` in the profile.
+4. removes bridge-owned `grok-build` / `openai-codex` routes from `~/.dsh/settings.yaml` (your other providers stay untouched);
+5. removes workspace symlinks to a DSH checkout from the profile `node_modules` (a checkout copy of the Models page calls `providerAuth` RPCs the published host does not expose);
+6. runs `pnpm install` in the profile.
 
 Restart `npx @deepseek-ai/dsh web`, open **Settings → Search**, and sign in with ChatGPT and Grok. The model picker then lists the ChatGPT models and `grok-4.6`; `web_search` tries the chain in order.
 

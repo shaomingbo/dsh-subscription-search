@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process'
-import { readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { readFile, rename, rm, unlink, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -49,6 +49,56 @@ async function atomicWrite(path, content) {
   }
 }
 
+/** Remove bridge-owned llm-pi-ai routes from the user settings document. */
+async function cleanBridgeRoutes(settingsPath) {
+  let text
+  try {
+    text = await readFile(settingsPath, 'utf8')
+  } catch (error) {
+    if (error?.code === 'ENOENT') return
+    throw error
+  }
+  const original = text
+  // Delete the bridge-owned routes from the llm-pi-ai providers dict; keep
+  // every other provider untouched. grok-build carries the bridge client
+  // identifier header; openai-codex names the bridge credential reference.
+  text = text.replace(
+    /^ {4}grok-build:\n(?: {6}[^\n]*\n)+/m,
+    '',
+  )
+  text = text.replace(
+    /^ {4}openai-codex:\n(?: {6}[^\n]*\n)+/m,
+    '',
+  )
+  if (text !== original) {
+    await writeFile(settingsPath, text, 'utf8')
+    console.log('Removed bridge-owned routes (grok-build / openai-codex) from settings.yaml')
+  }
+}
+
+/** Remove a workspace-override package from the profile node_modules. */
+async function removeWorkspaceOverrides(profileDir) {
+  // When developing locally the profile may symlink packages to a workspace
+  // checkout; the shipped ui-settings-models has no subscription cards, and a
+  // checkout copy calls providerAuth RPCs the published host does not expose.
+  const overrides = [
+    '@deepseek-ai/dsh-client-ui-settings-models',
+    '@deepseek-ai/dsh-client-ui-search-settings',
+  ]
+  for (const name of overrides) {
+    const target = join(profileDir, 'node_modules', name)
+    try {
+      const stat = await import('node:fs/promises').then(fs => fs.lstat(target))
+      if (stat.isSymbolicLink()) {
+        await rm(target, { recursive: true, force: true })
+        console.log(`Removed workspace symlink ${name} (the published package re-installs on pnpm install)`)
+      }
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
+  }
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2))
   if (options.help) {
@@ -61,6 +111,12 @@ async function main() {
   const packagePath = join(profileDir, 'package.json')
   const original = await readFile(packagePath, 'utf8')
   const pkg = JSON.parse(original)
+
+  // Remove stale bridge routes from settings and workspace symlinks before
+  // installing, so the first boot after restart is fully native.
+  await cleanBridgeRoutes(join(dshHome, 'settings.yaml'))
+  await removeWorkspaceOverrides(profileDir)
+
   pkg.dependencies ||= {}
   pkg.dependencies[PACKAGE_NAME] = options.source
   pkg.dsh ||= {}
