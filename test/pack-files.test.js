@@ -12,6 +12,7 @@ const REQUIRED_LIB = [
   'lib/client.js',
   'lib/auth-runtime.js',
   'lib/chain-search.js',
+  'lib/credential-sync.js',
   'lib/oauth-store.js',
 ]
 

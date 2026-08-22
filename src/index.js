@@ -8,6 +8,7 @@
 import { homedir } from 'node:os'
 import { SubscriptionAuthRuntime } from './auth-runtime.js'
 import { SubscriptionChainSearchProvider } from './chain-search.js'
+import { createCredentialSynchronizer } from './credential-sync.js'
 
 const CHANNEL = '/subscription-search'
 
@@ -82,38 +83,17 @@ export const name = 'dsh-subscription-search'
 export const inject = ['connection', 'credentials', 'settings', 'timer', 'web']
 
 export function apply(ctx) {
-  const home = ctx.get('dshHome')
   const filename = `${process.env.DSH_HOME ?? `${homedir()}/.dsh`}/.oauth.json`
 
+  let synchronizer
   const auth = new SubscriptionAuthRuntime({
     filename,
     onChanged: providerId => {
-      if (providerId === 'openai-codex' || providerId === 'xai') void syncCredential(providerId, 'store')
+      if (providerId === 'openai-codex' || providerId === 'xai') void synchronizer?.background(providerId, 'store')
     },
   })
+  synchronizer = createCredentialSynchronizer({ auth, credentials: ctx.credentials, logger: ctx.logger })
   void auth.init()
-
-  let syncInFlight
-  /** Refresh (if needed) and push the fresh access token into the credentials seam. */
-  const syncCredential = async (provider, reason) => {
-    if (syncInFlight) return syncInFlight
-    syncInFlight = (async () => {
-      if (!auth.configured(provider)) return
-      const resolved = await auth.resolveOAuth(provider)
-      if (resolved === undefined || resolved.apiKey.length === 0) return
-      const ref = CREDENTIAL_REFS[provider]
-      const current = await ctx.credentials.resolve(ref)
-      if (current?.value !== resolved.apiKey) {
-        await ctx.credentials.set(ref, resolved.apiKey)
-        ctx.logger.info('dsh-subscription-search: synchronized credential %s (%s)', ref, reason)
-      }
-    })().catch(error => {
-      ctx.logger.warn('dsh-subscription-search: %s sync failed: %s', reason, error instanceof Error ? error.message : String(error))
-    }).finally(() => {
-      syncInFlight = undefined
-    })
-    return syncInFlight
-  }
 
   // Provision model routes once settings is live; a conflict with a user-owned
   // route keeps the user's section and only costs a diagnostic. Runs on a
@@ -134,15 +114,15 @@ export function apply(ctx) {
     if (provider !== 'openai-codex' && provider !== 'grok-build') return next()
     const oauthProvider = provider === 'openai-codex' ? 'openai-codex' : 'xai'
     return (async function* () {
-      await syncCredential(oauthProvider, 'request')
+      await synchronizer.sync(oauthProvider, 'request')
       yield* next()
     })()
   })
 
   // Periodic background refresh.
   ctx.interval(() => {
-    void syncCredential('openai-codex', 'timer')
-    void syncCredential('xai', 'timer')
+    void synchronizer.background('openai-codex', 'timer')
+    void synchronizer.background('xai', 'timer')
   }, 10 * 60 * 1000)
 
   // Internal-chain search provider under the scalar searchProvider id.

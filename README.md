@@ -25,7 +25,7 @@ It does not contain, upload, or commit any token.
 ## Install
 
 ```bash
-npx --yes github:shaomingbo/dsh-subscription-search#v0.1.2
+npx --yes github:shaomingbo/dsh-subscription-search#v0.1.3
 ```
 
 The installer:
@@ -42,7 +42,7 @@ Restart `npx @deepseek-ai/dsh web`, open **Settings → Search**, and sign in wi
 Alternative installation (official plugin path):
 
 ```bash
-dsh plugin --profile web add github:shaomingbo/dsh-subscription-search#v0.1.2
+dsh plugin --profile web add github:shaomingbo/dsh-subscription-search#v0.1.3
 ```
 
 ## How it works
@@ -77,7 +77,7 @@ An unavailable provider is skipped, a failure or 60s timeout continues to the ne
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DSH_SUBSCRIPTION_SEARCH_SOURCE` | `github:shaomingbo/dsh-subscription-search#v0.1.2` | Installer package source |
+| `DSH_SUBSCRIPTION_SEARCH_SOURCE` | `github:shaomingbo/dsh-subscription-search#v0.1.3` | Installer package source |
 | `DSH_HOME` | `~/.dsh` | Harness home; `.oauth.json` lives here |
 
 ## Security notes
