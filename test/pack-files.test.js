@@ -14,6 +14,7 @@ const REQUIRED_LIB = [
   'lib/chain-search.js',
   'lib/credential-sync.js',
   'lib/oauth-store.js',
+  'lib/usage.js',
 ]
 
 test('package files field ships every host module the runtime imports', () => {

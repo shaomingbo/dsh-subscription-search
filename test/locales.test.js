@@ -16,6 +16,8 @@ const CHINESE_CHROME = [
   '已连接',
   '未连接',
   '断开连接',
+  '周剩余',
+  '刷新用量',
 ]
 
 const HARDCODED_ENGLISH_CHROME = [

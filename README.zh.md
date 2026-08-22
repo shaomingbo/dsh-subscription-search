@@ -14,7 +14,8 @@
 | Grok 登录 | 在 **设置 → 搜索** 中设备码登录（接受 `auth.x.ai` / `accounts.x.ai` / `x.com` 验证页） |
 | 模型路由 | `openai-codex`（ChatGPT 订阅）和 `grok-build`（Grok 4.6，推理档位 off/low/medium/high/xhigh） |
 | 网页搜索链 | ChatGPT → Grok → Exa → DeepSeek，每次尝试 60 秒预算，工具总预算 250 秒 |
-| 搜索设置面板 | 链路状态表、订阅连接/断开、Exa API 密钥输入 |
+| 搜索设置面板 | 链路状态表、订阅连接/断开、周用量、Exa API 密钥输入 |
+| 周用量 | ChatGPT（Codex）与 Grok 的本周剩余额度，显示在订阅卡片和输入框下方 |
 
 ## 要求
 
@@ -25,7 +26,7 @@
 ## 安装
 
 ```bash
-npx --yes github:shaomingbo/dsh-subscription-search#v0.1.3
+npx --yes github:shaomingbo/dsh-subscription-search#v0.1.4
 ```
 
 安装器会：
@@ -42,7 +43,7 @@ npx --yes github:shaomingbo/dsh-subscription-search#v0.1.3
 官方插件路径的替代安装：
 
 ```bash
-dsh plugin --profile web add github:shaomingbo/dsh-subscription-search#v0.1.3
+dsh plugin --profile web add github:shaomingbo/dsh-subscription-search#v0.1.4
 ```
 
 ## 工作原理
@@ -73,11 +74,15 @@ dsh plugin --profile web add github:shaomingbo/dsh-subscription-search#v0.1.3
 
 `tool-web` 被补丁为 `fetch: false` 和 `searchTimeoutMs: 250000`（四次 60 秒尝试加切换开销）。
 
+### 周用量
+
+订阅连接后，Host 向 ChatGPT / Grok 查询当前周额度（Codex 另带 5 小时窗口），只把百分比和重置时间返回给浏览器。设置 → 搜索 的订阅卡片展示详情；输入框下方（与现有 stats 行同带）显示紧凑剩余。失败只影响用量行，响应不含 token、账户 id 或上游错误正文。
+
 ## 环境变量覆盖
 
 | 变量 | 默认值 | 用途 |
 |---|---|---|
-| `DSH_SUBSCRIPTION_SEARCH_SOURCE` | `github:shaomingbo/dsh-subscription-search#v0.1.3` | 安装器包来源 |
+| `DSH_SUBSCRIPTION_SEARCH_SOURCE` | `github:shaomingbo/dsh-subscription-search#v0.1.4` | 安装器包来源 |
 | `DSH_HOME` | `~/.dsh` | Harness 主目录；`.oauth.json` 位于此处 |
 
 ## 安全说明

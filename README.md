@@ -14,7 +14,8 @@ It does not contain, upload, or commit any token.
 | Grok login | Device-code sign-in under **Settings → Search** (accepts `auth.x.ai` / `accounts.x.ai` / `x.com` verification) |
 | Model routes | `openai-codex` (ChatGPT subscription) and `grok-build` (Grok 4.6, reasoning off/low/medium/high/xhigh) |
 | Web search chain | ChatGPT → Grok → Exa → DeepSeek, each with a 60s attempt budget and a 250s tool budget |
-| Search settings panel | Chain status table, subscription connect/disconnect, Exa API key input |
+| Search settings panel | Chain status table, subscription connect/disconnect, weekly usage, Exa API key input |
+| Weekly usage | ChatGPT (Codex) and Grok remaining weekly allowance, shown on the subscription cards and under the composer |
 
 ## Requirements
 
@@ -25,7 +26,7 @@ It does not contain, upload, or commit any token.
 ## Install
 
 ```bash
-npx --yes github:shaomingbo/dsh-subscription-search#v0.1.3
+npx --yes github:shaomingbo/dsh-subscription-search#v0.1.4
 ```
 
 The installer:
@@ -42,7 +43,7 @@ Restart `npx @deepseek-ai/dsh web`, open **Settings → Search**, and sign in wi
 Alternative installation (official plugin path):
 
 ```bash
-dsh plugin --profile web add github:shaomingbo/dsh-subscription-search#v0.1.3
+dsh plugin --profile web add github:shaomingbo/dsh-subscription-search#v0.1.4
 ```
 
 ## How it works
@@ -73,11 +74,15 @@ An unavailable provider is skipped, a failure or 60s timeout continues to the ne
 
 `tool-web` is patched to `fetch: false` and `searchTimeoutMs: 250000` (four 60s attempts plus switching overhead).
 
+### Weekly usage
+
+When a subscription is connected, the host asks ChatGPT and Grok for the current weekly allowance (Codex also reports its 5-hour window) and returns only percentages and reset times. The Settings → Search cards show the detail; a compact readout sits under the composer next to the shipped stats line. Failures stay on that row and never include tokens, account ids, or upstream error bodies.
+
 ## Environment overrides
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DSH_SUBSCRIPTION_SEARCH_SOURCE` | `github:shaomingbo/dsh-subscription-search#v0.1.3` | Installer package source |
+| `DSH_SUBSCRIPTION_SEARCH_SOURCE` | `github:shaomingbo/dsh-subscription-search#v0.1.4` | Installer package source |
 | `DSH_HOME` | `~/.dsh` | Harness home; `.oauth.json` lives here |
 
 ## Security notes

@@ -9,6 +9,7 @@ import { homedir } from 'node:os'
 import { SubscriptionAuthRuntime } from './auth-runtime.js'
 import { SubscriptionChainSearchProvider } from './chain-search.js'
 import { createCredentialSynchronizer } from './credential-sync.js'
+import { createUsageService } from './usage.js'
 
 const CHANNEL = '/subscription-search'
 
@@ -93,6 +94,10 @@ export function apply(ctx) {
     },
   })
   synchronizer = createCredentialSynchronizer({ auth, credentials: ctx.credentials, logger: ctx.logger })
+  const usage = createUsageService({
+    auth,
+    sync: (provider, reason) => synchronizer.sync(provider, reason),
+  })
   void auth.init()
 
   // Provision model routes once settings is live; a conflict with a user-owned
@@ -151,7 +156,12 @@ export function apply(ctx) {
       if (endpoint === 'logout') {
         const { provider } = requireObject(payload)
         await auth.logout(provider)
+        usage.clear(provider)
         return success({})
+      }
+      if (endpoint === 'usage') {
+        const { refresh } = requireObject(payload)
+        return success({ providers: await usage.fetchAll({ refresh: refresh === true, signal }) })
       }
       return failure(`unknown subscription-search endpoint: ${endpoint}`)
     } catch (error) {
@@ -160,6 +170,7 @@ export function apply(ctx) {
   }, { authority: 'loopback' })
 
   ctx.on('dispose', () => {
+    usage.clear()
     void auth.dispose()
   })
 }

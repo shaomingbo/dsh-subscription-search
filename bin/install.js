@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const PACKAGE_NAME = 'dsh-subscription-search'
-const DEFAULT_SOURCE = 'github:shaomingbo/dsh-subscription-search#v0.1.3'
+const DEFAULT_SOURCE = 'github:shaomingbo/dsh-subscription-search#v0.1.4'
 const SUPERSEDED_BRIDGES = ['dsh-codex-auth-bridge', 'dsh-grok-build-auth-bridge']
 
 function parseArgs(argv) {
@@ -102,7 +102,7 @@ async function removeWorkspaceOverrides(profileDir) {
 async function main() {
   const options = parseArgs(process.argv.slice(2))
   if (options.help) {
-    console.log(`Usage: ${PACKAGE_NAME} [--profile web] [--source github:shaomingbo/dsh-subscription-search#v0.1.3]\n\nInstalls the package into a DSH profile and adds its Cordis bundle.`)
+    console.log(`Usage: ${PACKAGE_NAME} [--profile web] [--source github:shaomingbo/dsh-subscription-search#v0.1.4]\n\nInstalls the package into a DSH profile and adds its Cordis bundle.`)
     return
   }
 
