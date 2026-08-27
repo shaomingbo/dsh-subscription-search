@@ -112,6 +112,27 @@ dsh plugin --profile web add github:shaomingbo/dsh-subscription-search#v0.1.6
 - 所有携带凭据的搜索请求都拒绝重定向。
 - 如果父环境中导出了 `OPENAI_CODEX_ACCESS_TOKEN` / `GROK_BUILD_ACCESS_TOKEN`，它们会遮蔽可写凭据存储。启动 DSH 前请先取消设置。
 
+## 故障排查
+
+### 登录报 "country / region not supported"
+
+OpenAI 会拒绝不受支持出口区域的登录（`unsupported_country_region_territory`），x.ai 端点则可能直接 TCP 超时——两者都在宿主进程绕过了代理时发生。关键事实：**Node 的 `fetch` 默认不读 `http_proxy` / `https_proxy` 环境变量**，进程不显式开启时，光设变量对宿主毫无作用。
+
+修复（二选一）：
+
+```bash
+# 1. 推荐：让 undici 遵循代理环境变量
+NODE_USE_ENV_PROXY=1 npx @deepseek-ai/dsh web
+```
+
+2. 或开启客户端的 TUN 模式（透明接管）。实测两个坑：
+   - 切完 TUN 后要验证是否真正接管：对比带/不带代理 env 时 `curl ipinfo.io` 的出口国家。
+   - real-ip 模式下分流规则拿不到域名：需把 `DOMAIN-SUFFIX,x.ai`、`DOMAIN-SUFFIX,xai.com` 加进代理分组，并启用 sniffer（或 fake-ip DNS），否则 auth.x.ai 依旧超时而 auth.openai.com 正常。
+
+Windows（PowerShell）对应写法：`$env:NODE_USE_ENV_PROXY="1"; npx @deepseek-ai/dsh web`。
+
+现在失败信封自带诊断信息：message 携带 `upstream:` 细节（如 `[PI_AI_AUTH_LOGIN_FAILED] … upstream: … status 403 {…}` 或 `could not reach the auth endpoint (UND_ERR_CONNECT_TIMEOUT)`），完整堆栈由宿主进程日志输出。
+
 ## 从 CLI-auth bridge 迁移
 
 如果你之前安装过 `dsh-codex-auth-bridge` 或 `dsh-grok-build-auth-bridge`，安装器会将其从 bundle 栈移除。旧的 CLI `auth.json` 不再被读取；请在 设置 → 搜索 中重新登录。移除不再使用的依赖：

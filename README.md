@@ -112,6 +112,27 @@ When a subscription is connected, the host asks ChatGPT and Grok for the current
 - Redirects are rejected on every credential-bearing search request.
 - If `OPENAI_CODEX_ACCESS_TOKEN` / `GROK_BUILD_ACCESS_TOKEN` are exported in the parent environment, they shadow the writable credential store. Unset them before starting DSH.
 
+## Troubleshooting
+
+### Login reports "country / region not supported"
+
+OpenAI rejects sign-ins from unsupported egress regions (`unsupported_country_region_territory`), and x.ai endpoints may hard-timeout — both happen when the DSH host process bypasses your proxy. The subtle part: **Node's `fetch` ignores `http_proxy` / `https_proxy` environment variables** unless the process opts in, so setting those vars alone does nothing for the host.
+
+Fixes (pick one):
+
+```bash
+# 1. Recommended: make undici honor your proxy environment variables
+NODE_USE_ENV_PROXY=1 npx @deepseek-ai/dsh web
+```
+
+2. Or enable your client's TUN mode (transparent routing). Field-tested caveats:
+   - After toggling TUN, verify it actually took over: compare `curl ipinfo.io` output with and without proxy env vars.
+   - In real-ip mode, per-domain rules never see the hostname; add `DOMAIN-SUFFIX,x.ai` / `DOMAIN-SUFFIX,xai.com` to a proxy group and enable the sniffer (or fake-ip DNS), otherwise auth.x.ai still times out while auth.openai.com works.
+
+Windows (PowerShell) equivalent of option 1: `$env:NODE_USE_ENV_PROXY="1"; npx @deepseek-ai/dsh web`.
+
+Failure envelopes make this diagnosable on their own now: messages carry an `upstream:` detail (e.g. `[PI_AI_AUTH_LOGIN_FAILED] … upstream: … status 403 {…}` or `could not reach the auth endpoint (UND_ERR_CONNECT_TIMEOUT)`), and the full stack is logged by the host process.
+
 ## Migrating from the CLI-auth bridges
 
 If you previously installed `dsh-codex-auth-bridge` or `dsh-grok-build-auth-bridge`, the installer removes them from the bundle stack. The old CLI `auth.json` files are no longer read; sign in again under Settings → Search. Remove the now-unused dependencies:
