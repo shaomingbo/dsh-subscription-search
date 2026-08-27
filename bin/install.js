@@ -1,17 +1,27 @@
 #!/usr/bin/env node
 
+import { readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { readFile, rename, rm, unlink, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const PACKAGE_NAME = 'dsh-subscription-search'
-const DEFAULT_SOURCE = 'github:shaomingbo/dsh-subscription-search#v0.1.4'
 const SUPERSEDED_BRIDGES = ['dsh-codex-auth-bridge', 'dsh-grok-build-auth-bridge']
 
+/**
+ * Pin the default source to the SemVer tag of the copy that is running, so
+ * installing from any published tag records exactly that tag — never a stale
+ * hardcode or a floating branch.
+ */
+function defaultSource() {
+  const pkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json')
+  return `github:shaomingbo/dsh-subscription-search#v${JSON.parse(readFileSync(pkgPath, 'utf8')).version}`
+}
+
 function parseArgs(argv) {
-  const result = { profile: 'web', source: process.env.DSH_SUBSCRIPTION_SEARCH_SOURCE || DEFAULT_SOURCE }
+  const result = { profile: 'web', source: process.env.DSH_SUBSCRIPTION_SEARCH_SOURCE || defaultSource() }
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--profile') result.profile = argv[++index]
@@ -102,7 +112,7 @@ async function removeWorkspaceOverrides(profileDir) {
 async function main() {
   const options = parseArgs(process.argv.slice(2))
   if (options.help) {
-    console.log(`Usage: ${PACKAGE_NAME} [--profile web] [--source github:shaomingbo/dsh-subscription-search#v0.1.4]\n\nInstalls the package into a DSH profile and adds its Cordis bundle.`)
+    console.log(`Usage: ${PACKAGE_NAME} [--profile web] [--source ${defaultSource()}]\n\nInstalls the package into a DSH profile and adds its Cordis bundle.`)
     return
   }
 
