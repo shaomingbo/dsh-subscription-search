@@ -26,10 +26,10 @@ It does not contain, upload, or commit any token.
 ## Install
 
 ```bash
-npx --yes github:shaomingbo/dsh-subscription-search#v0.1.4
+npx --yes github:shaomingbo/dsh-subscription-search#v0.1.6
 ```
 
-The installer:
+Bare `npx` runs `install`. The installer:
 
 1. adds this package to `~/.dsh/profiles/web/package.json`;
 2. adds `dsh-subscription-search` to that profile's `dsh.profile.bundles` list;
@@ -38,12 +38,32 @@ The installer:
 5. removes workspace symlinks to a DSH checkout from the profile `node_modules` (a checkout copy of the Models page calls `providerAuth` RPCs the published host does not expose);
 6. runs `pnpm install` in the profile.
 
+Repeat runs are idempotent, and a failed dependency install restores the previous manifest.
+
+### Status and uninstall
+
+```bash
+# Whether (and how) the plugin is present in a profile
+npx --yes github:shaomingbo/dsh-subscription-search#v0.1.6 status
+
+# Remove the dependency reference, the bundle entry, and the installed copy
+npx --yes github:shaomingbo/dsh-subscription-search#v0.1.6 uninstall
+```
+
+`status` exits non-zero when the plugin is absent or only partially installed; `uninstall` is idempotent. Both accept the same flags as `install`.
+
+All commands default to the `web` profile; pass `--profile <name>` for another one, or `--source <spec>` to install from a different package source. Local development uses `link:` directly:
+
+```bash
+npx --yes github:shaomingbo/dsh-subscription-search#v0.1.6 --source link:/absolute/path/to/checkout
+```
+
 Restart `npx @deepseek-ai/dsh web`, open **Settings → Search**, and sign in with ChatGPT and Grok. The model picker then lists the ChatGPT models and `grok-4.6`; `web_search` tries the chain in order.
 
 Alternative installation (official plugin path):
 
 ```bash
-dsh plugin --profile web add github:shaomingbo/dsh-subscription-search#v0.1.4
+dsh plugin --profile web add github:shaomingbo/dsh-subscription-search#v0.1.6
 ```
 
 ## How it works
@@ -82,7 +102,7 @@ When a subscription is connected, the host asks ChatGPT and Grok for the current
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DSH_SUBSCRIPTION_SEARCH_SOURCE` | `github:shaomingbo/dsh-subscription-search#v0.1.4` | Installer package source |
+| `DSH_SUBSCRIPTION_SEARCH_SOURCE` | `github:shaomingbo/dsh-subscription-search#v0.1.6` | Installer package source |
 | `DSH_HOME` | `~/.dsh` | Harness home; `.oauth.json` lives here |
 
 ## Security notes

@@ -6,7 +6,8 @@ import path from 'node:path'
 
 // Imported through a cache-safe dynamic specifier so every boot() below sees
 // one shared module instance while applying against a fresh DSH_HOME each time.
-const { apply, envelopeCode } = await import('../lib/index.js')
+const { apply, envelopeCode, envelopeOutcome } = await import('../lib/index.js')
+const { SubscriptionAuthRuntime } = await import('../lib/auth-runtime.js')
 
 /**
  * Boots the plugin exactly like the host would: a fake context whose rpc
@@ -135,4 +136,50 @@ test('success paths are untouched by envelope normalization', async () => {
     assert.equal(typeof provider.displayName, 'string')
     assert.equal(provider.configured, false)
   }
+})
+
+test('credential failures carry their ref when, and only when, it is genuine', () => {
+  // A genuine string ref unlocks the schema-legal credential-rejected branch.
+  assert.deepEqual(
+    envelopeOutcome('PI_AI_AUTH_RESOLUTION_FAILED', { ref: 'OPENAI_CODEX_ACCESS_TOKEN' }),
+    { code: 'credential-rejected', details: { ref: 'OPENAI_CODEX_ACCESS_TOKEN' } },
+  )
+  // Missing, malformed, or non-string refs downgrade to the generic envelope.
+  for (const details of [undefined, null, 'ref', 42, {}, { ref: 42 }, { ref: null }]) {
+    const outcome = envelopeOutcome('PI_AI_AUTH_RESOLUTION_FAILED', details)
+    assert.equal(outcome.code, 'internal')
+    assert.deepEqual(outcome.details, {})
+  }
+  // Whitelisted codes never adopt foreign details.
+  assert.deepEqual(envelopeOutcome('internal', { ref: 'spoof' }), { code: 'internal', details: {} })
+  assert.deepEqual(envelopeOutcome('cancelled', { ref: 'spoof' }), { code: 'cancelled', details: {} })
+})
+
+test('resolution failures name the credential reference they could not resolve', async () => {
+  const filename = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'subsearch-resolve-')), '.oauth.json')
+  const document = {
+    version: 1,
+    credentials: {
+      'openai-codex': {
+        type: 'oauth',
+        access: 'access-token',
+        refresh: 'refresh-token',
+        expires: Date.now() + 3_600_000,
+      },
+    },
+  }
+  fs.writeFileSync(filename, JSON.stringify(document))
+  const runtime = new SubscriptionAuthRuntime({ filename })
+  await runtime.init()
+  const rejection = await runtime.resolveOAuth('openai-codex').then(
+    () => { throw new Error('resolveOAuth unexpectedly succeeded') },
+    error => error,
+  )
+  assert.equal(rejection.code, 'PI_AI_AUTH_RESOLUTION_FAILED')
+  assert.deepEqual(rejection.details, { ref: 'OPENAI_CODEX_ACCESS_TOKEN' })
+  // The thrown error maps end-to-end onto the published schema branch.
+  assert.deepEqual(
+    envelopeOutcome(rejection.code, rejection.details),
+    { code: 'credential-rejected', details: { ref: 'OPENAI_CODEX_ACCESS_TOKEN' } },
+  )
 })
