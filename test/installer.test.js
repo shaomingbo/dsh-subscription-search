@@ -179,3 +179,85 @@ test('dependency toolchain failures roll the manifest back on install and uninst
   assert.match(result.output, /failed with exit code 3/)
   assert.equal(world.read().dependencies[PACKAGE_NAME], `link:${repoRoot}`, 'uninstall must restore the manifest')
 })
+
+test('install blocks while superseded bridge bundles remain in the manifest', () => {
+  const world = makeWorld()
+  seed(world, {
+    name: 'loop-profile', private: true,
+    dependencies: { 'dsh-codex-auth-bridge': 'github:o/bridge#v1.0.0' },
+    dsh: { profile: { bundles: ['dsh-codex-auth-bridge'] } },
+  })
+  const before = world.text()
+
+  const result = run(world, ['install'])
+  assert.notEqual(result.status, 0, result.output)
+  assert.match(result.output, /legacy state detected/i)
+  assert.match(result.output, /dsh-codex-auth-bridge/)
+  assert.match(result.output, /manual migration/i)
+  assert.equal(world.text(), before, 'the manifest must stay untouched while legacy state blocks the install')
+})
+
+test('install blocks while bridge routes remain in settings.yaml', () => {
+  const world = makeWorld()
+  seed(world)
+  const settingsPath = path.join(world.home, 'settings.yaml')
+  const settings = `llm:\n  pi:\n  providers:\n    grok-build:\n      ref: GROK_BRIDGE\n    openai-codex:\n      ref: CODEX_BRIDGE\n`
+  fs.writeFileSync(settingsPath, settings)
+  const before = fs.readFileSync(settingsPath, 'utf8')
+
+  const result = run(world, ['install'])
+  assert.notEqual(result.status, 0, result.output)
+  assert.match(result.output, /legacy state detected/i)
+  assert.match(result.output, /grok-build/)
+  assert.equal(fs.readFileSync(settingsPath, 'utf8'), before, 'settings.yaml must never be mutated by the installer')
+})
+
+test('install blocks while workspace override symlinks exist', () => {
+  const world = makeWorld()
+  seed(world)
+  const overrideDir = path.join(world.profileDir, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-models')
+  fs.mkdirSync(path.dirname(overrideDir), { recursive: true })
+  fs.symlinkSync(repoRoot, overrideDir, 'dir')
+
+  const result = run(world, ['install'])
+  assert.notEqual(result.status, 0, result.output)
+  assert.match(result.output, /legacy state detected/i)
+  assert.match(result.output, /dsh-client-ui-settings-models/)
+  assert.ok(fs.lstatSync(overrideDir).isSymbolicLink(), 'the override symlink must stay untouched')
+})
+
+test('status reports legacy state and install succeeds once the migration is done', () => {
+  const world = makeWorld()
+  seed(world, {
+    name: 'loop-profile', private: true,
+    dsh: { profile: { bundles: ['dsh-grok-build-auth-bridge'] } },
+  })
+
+  let result = run(world, ['status'])
+  assert.match(result.output, /legacy state detected/i)
+  assert.match(result.output, /dsh-grok-build-auth-bridge/)
+
+  // Manual migration: the owner removes the bridge entry by hand.
+  const manifest = world.read()
+  manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter(name => name !== 'dsh-grok-build-auth-bridge')
+  fs.writeFileSync(world.manifest, `${JSON.stringify(manifest, null, 2)}\n`)
+
+  assert.equal(run(world, ['install']).status, 0)
+  assert.doesNotMatch(run(world, ['status']).output, /legacy state detected/i)
+})
+
+test('installer runs never read or write the oauth credential store', () => {
+  const world = makeWorld()
+  seed(world)
+  const oauthStore = path.join(world.home, '.oauth.json')
+  const fakeCredentials = '{"version":1,"providers":{"chatgpt":{"accessToken":"<REDACTED>","refreshToken":"<REDACTED>"}}}'
+  fs.writeFileSync(oauthStore, fakeCredentials)
+  const credentialsSeam = path.join(world.home, 'credentials.yaml')
+  fs.writeFileSync(credentialsSeam, 'version: 1\nrefs:\n  CHATGPT_TOKEN: from-store\n')
+
+  assert.equal(run(world, ['install']).status, 0, run(world, ['status']).output)
+  assert.equal(run(world, ['uninstall']).status, 0)
+  assert.equal(fs.readFileSync(oauthStore, 'utf8'), fakeCredentials, 'the oauth store must survive installer runs byte-identically')
+  assert.equal(fs.readFileSync(credentialsSeam, 'utf8'), 'version: 1\nrefs:\n  CHATGPT_TOKEN: from-store\n', 'the credentials seam must survive installer runs byte-identically')
+  assert.doesNotMatch(run(world, ['status']).output, /<REDACTED>/, 'no credential value may appear in installer output')
+})

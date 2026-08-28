@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
-import { readFile, rename, rm, unlink, writeFile } from 'node:fs/promises'
+import { readFile, rename, unlink, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,6 +10,10 @@ import { fileURLToPath } from 'node:url'
 const PACKAGE_NAME = 'dsh-subscription-search'
 const COMMANDS = ['install', 'status', 'uninstall']
 const SUPERSEDED_BRIDGES = ['dsh-codex-auth-bridge', 'dsh-grok-build-auth-bridge']
+const WORKSPACE_OVERRIDES = [
+  '@deepseek-ai/dsh-client-ui-settings-models',
+  '@deepseek-ai/dsh-client-ui-search-settings',
+]
 
 /**
  * Pin the default source to the SemVer tag of the copy that is running, so
@@ -100,54 +104,52 @@ async function loadManifest(packagePath) {
   }
 }
 
-/** Remove bridge-owned llm-pi-ai routes from the user settings document. */
-async function cleanBridgeRoutes(settingsPath) {
-  let text
+/**
+ * Detect pre-existing state this installer must not touch. The installer is
+ * only allowed to edit its own dependency and bundle entry, so any superseded
+ * bridge bundle, bridge-owned settings route, or workspace override symlink is
+ * reported for manual migration — never mutated.
+ */
+async function detectLegacyState(dshHome, pkg, profileDir) {
+  const facts = []
+  const bundles = Array.isArray(pkg?.dsh?.profile?.bundles) ? pkg.dsh.profile.bundles : []
+  const bridgeBundles = bundles.filter(name => SUPERSEDED_BRIDGES.includes(name))
+  if (bridgeBundles.length > 0) {
+    facts.push(`superseded bridge bundles in the profile manifest: ${bridgeBundles.join(', ')}`)
+  }
+  const settingsPath = join(dshHome, 'settings.yaml')
+  let settings
   try {
-    text = await readFile(settingsPath, 'utf8')
+    settings = await readFile(settingsPath, 'utf8')
   } catch (error) {
-    if (error?.code === 'ENOENT') return
-    throw error
+    if (error?.code !== 'ENOENT') throw error
   }
-  const original = text
-  // Delete the bridge-owned routes from the llm-pi-ai providers dict; keep
-  // every other provider untouched. grok-build carries the bridge client
-  // identifier header; openai-codex names the bridge credential reference.
-  text = text.replace(
-    /^ {4}grok-build:\n(?: {6}[^\n]*\n)+/m,
-    '',
-  )
-  text = text.replace(
-    /^ {4}openai-codex:\n(?: {6}[^\n]*\n)+/m,
-    '',
-  )
-  if (text !== original) {
-    await writeFile(settingsPath, text, 'utf8')
-    console.log('Removed bridge-owned routes (grok-build / openai-codex) from settings.yaml')
+  if (settings !== undefined) {
+    const routes = ['grok-build', 'openai-codex'].filter(name => new RegExp(`^\\s+${name}:\\s*$`, 'm').test(settings))
+    if (routes.length > 0) {
+      facts.push(`bridge-owned routes in settings.yaml: ${routes.join(', ')}`)
+    }
   }
-}
-
-/** Remove a workspace-override package from the profile node_modules. */
-async function removeWorkspaceOverrides(profileDir) {
-  // When developing locally the profile may symlink packages to a workspace
-  // checkout; the shipped ui-settings-models has no subscription cards, and a
-  // checkout copy calls providerAuth RPCs the published host does not expose.
-  const overrides = [
-    '@deepseek-ai/dsh-client-ui-settings-models',
-    '@deepseek-ai/dsh-client-ui-search-settings',
-  ]
-  for (const name of overrides) {
+  for (const name of WORKSPACE_OVERRIDES) {
     const target = join(profileDir, 'node_modules', name)
     try {
-      const stat = await import('node:fs/promises').then(fs => fs.lstat(target))
-      if (stat.isSymbolicLink()) {
-        await rm(target, { recursive: true, force: true })
-        console.log(`Removed workspace symlink ${name} (the published package re-installs on pnpm install)`)
-      }
+      if (lstatSync(target).isSymbolicLink()) facts.push(`workspace override symlink: ${name}`)
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error
     }
   }
+  return facts
+}
+
+function printMigrationGuidance(facts) {
+  console.error('legacy state detected; install blocked until the manual migration is done:')
+  for (const fact of facts) console.error(`  - ${fact}`)
+  console.error('manual migration:')
+  console.error('  1. remove the superseded bridge bundles (and their dependencies) from the profile manifest')
+  console.error('  2. remove the grok-build / openai-codex routes from settings.yaml by hand')
+  console.error('  3. delete the workspace override symlinks, then run pnpm install --ignore-scripts')
+  console.error('this installer only edits its own dependency and bundle entry;')
+  console.error('it never touches settings.yaml, other bundles, node_modules symlinks, or any credential store.')
 }
 
 function appliedManifest(pkg) {
@@ -158,19 +160,6 @@ function appliedManifest(pkg) {
   if (!pkg.dsh.profile.bundles.includes(PACKAGE_NAME)) {
     pkg.dsh.profile.bundles.push(PACKAGE_NAME)
   }
-  // The two CLI-auth bridges are superseded: they read ~/.codex/auth.json and
-  // ~/.grok/auth.json and replace the whole llm-pi-ai config. This plugin owns
-  // its own OAuth, so remove them from the bundle stack. The dependencies stay
-  // (harmless) unless the user removes them explicitly.
-  const bundles = pkg.dsh.profile.bundles
-  const remaining = bundles.filter(name => !SUPERSEDED_BRIDGES.includes(name))
-  const removed = bundles.filter(name => SUPERSEDED_BRIDGES.includes(name))
-  if (removed.length > 0) {
-    pkg.dsh.profile.bundles = remaining
-    console.log(`Removed superseded bridge bundles: ${removed.join(', ')}`)
-    console.log('  Their dependencies remain in package.json; remove them with:')
-    console.log('  dsh plugin remove dsh-codex-auth-bridge dsh-grok-build-auth-bridge')
-  }
   return pkg
 }
 
@@ -178,10 +167,14 @@ async function install(dshHome, profileDir, source) {
   const packagePath = join(profileDir, 'package.json')
   const { text, pkg } = await loadManifest(packagePath)
 
-  // Remove stale bridge routes from settings and workspace symlinks before
-  // installing, so the first boot after restart is fully native.
-  await cleanBridgeRoutes(join(dshHome, 'settings.yaml'))
-  await removeWorkspaceOverrides(profileDir)
+  // Legacy state blocks the install: the installer must not mutate settings,
+  // other bundles, or node_modules symlinks, so the owner migrates by hand.
+  const legacyFacts = await detectLegacyState(dshHome, pkg, profileDir)
+  if (legacyFacts.length > 0) {
+    printMigrationGuidance(legacyFacts)
+    process.exitCode = 1
+    return
+  }
 
   const previous = pkg.dependencies?.[PACKAGE_NAME]
   pkg.dependencies ||= {}
@@ -205,7 +198,7 @@ async function install(dshHome, profileDir, source) {
   console.log('Restart DSH so the new host bundle is composed.')
 }
 
-async function status(profileDir) {
+async function status(profileDir, dshHome) {
   const packagePath = join(profileDir, 'package.json')
   const { pkg } = await loadManifest(packagePath)
   const ref = pkg?.dependencies?.[PACKAGE_NAME]
@@ -220,6 +213,12 @@ async function status(profileDir) {
   console.log(`dependency: ${typeof ref === 'string' ? ref : '(absent)'}`)
   console.log(`bundle entry: ${bundled ? PACKAGE_NAME : '(absent)'}`)
   console.log(`installed copy: ${version === undefined ? 'missing' : `v${version}`}`)
+
+  const legacyFacts = await detectLegacyState(dshHome, pkg, profileDir)
+  if (legacyFacts.length > 0) {
+    console.log('legacy state detected (install blocked until the manual migration is done):')
+    for (const fact of legacyFacts) console.log(`  - ${fact}`)
+  }
 
   if (ref === undefined && !bundled && version === undefined) {
     console.log(`${PACKAGE_NAME} is not installed`)
@@ -276,7 +275,7 @@ async function main() {
 
   const dshHome = resolve(process.env.DSH_HOME || join(homedir(), '.dsh'))
   const profileDir = join(dshHome, 'profiles', options.profile)
-  if (options.command === 'status') return status(profileDir)
+  if (options.command === 'status') return status(profileDir, dshHome)
   if (options.command === 'uninstall') return uninstall(profileDir)
   return install(dshHome, profileDir, options.source)
 }

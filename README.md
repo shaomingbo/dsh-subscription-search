@@ -29,16 +29,19 @@ It does not contain, upload, or commit any token.
 npx --yes github:shaomingbo/dsh-subscription-search#v0.1.6
 ```
 
-Bare `npx` runs `install`. The installer:
-
-1. adds this package to `~/.dsh/profiles/web/package.json`;
-2. adds `dsh-subscription-search` to that profile's `dsh.profile.bundles` list;
-3. removes the superseded `dsh-codex-auth-bridge` and `dsh-grok-build-auth-bridge` from the bundle stack;
-4. removes bridge-owned `grok-build` / `openai-codex` routes from `~/.dsh/settings.yaml` (your other providers stay untouched);
-5. removes workspace symlinks to a DSH checkout from the profile `node_modules` (a checkout copy of the Models page calls `providerAuth` RPCs the published host does not expose);
-6. runs `pnpm install` in the profile.
+Bare `npx` runs `install`. The installer edits exactly two manifest fields — its own `dependencies` entry and its own `dsh.profile.bundles` entry — and then runs `pnpm install --ignore-scripts` in the profile. It never touches `settings.yaml`, other bundles, `node_modules` symlinks, or any credential store (`.oauth.json`, credentials refs).
 
 Repeat runs are idempotent, and a failed dependency install restores the previous manifest.
+
+#### Legacy-state blocking
+
+Superseded state from the CLI-auth bridges blocks the install until you migrate by hand:
+
+- `dsh-codex-auth-bridge` / `dsh-grok-build-auth-bridge` bundles still in the profile manifest;
+- bridge-owned `grok-build` / `openai-codex` routes still present in `~/.dsh/settings.yaml`;
+- workspace symlinks to a DSH checkout in the profile `node_modules` (a checkout copy of the Models page calls `providerAuth` RPCs the published host does not expose).
+
+`status` reports each of these facts; `install` refuses to run and prints the manual migration steps. `status` and the configured-provider checks never touch the network, and no installer command reads or writes the OAuth store.
 
 ### Status and uninstall
 
@@ -135,7 +138,7 @@ Failure envelopes make this diagnosable on their own now: messages carry an `ups
 
 ## Migrating from the CLI-auth bridges
 
-If you previously installed `dsh-codex-auth-bridge` or `dsh-grok-build-auth-bridge`, the installer removes them from the bundle stack. The old CLI `auth.json` files are no longer read; sign in again under Settings → Search. Remove the now-unused dependencies:
+If you previously installed `dsh-codex-auth-bridge` or `dsh-grok-build-auth-bridge`, install is blocked until you remove them by hand. The old CLI `auth.json` files are no longer read; sign in again under Settings → Search. Remove the now-unused dependencies and bundle entries:
 
 ```bash
 dsh plugin --profile web remove dsh-codex-auth-bridge dsh-grok-build-auth-bridge

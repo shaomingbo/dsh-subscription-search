@@ -57,3 +57,20 @@ test('verificationUri rejects an untrusted origin', () => {
   assert.equal(runtime.verificationUri('xai', 'https://accounts.x.ai/device?code=x'), 'https://accounts.x.ai/device?code=x')
   assert.equal(runtime.verificationUri('openai-codex', 'https://auth.openai.com/device'), 'https://auth.openai.com/device')
 })
+
+test('configured() answers from the local store without any network access', async () => {
+  // Poison the network surface: if the configured probe reached for the web,
+  // these stubs would make it blow up instead of answering from the store.
+  const networkGuards = [
+    mock.method(globalThis, 'fetch', () => { throw new Error('network is forbidden in this test') }),
+  ]
+  try {
+    const runtime = new SubscriptionAuthRuntime({ filename: '/tmp/nonexistent-oauth.json' })
+    assert.equal(runtime.configured('xai'), false)
+    assert.equal(runtime.configured('openai-codex'), false)
+    const providers = runtime.providers()
+    assert.equal(providers.every(provider => provider.configured === false), true)
+  } finally {
+    for (const guard of networkGuards) guard.mock.restore()
+  }
+})
