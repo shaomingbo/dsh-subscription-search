@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { apply, createRpcHandler, SearchChain, SEARCH_CHAIN_SERVICE } from '../lib/index.js'
 
-function context(section, withSettings = true) {
+function context(section, withSettings = true, credentials = { async resolve() { return undefined } }) {
   const provided = new Map()
   const providers = []
   const handlers = new Map()
@@ -25,7 +25,7 @@ function context(section, withSettings = true) {
   }
   return {
     ctx: {
-      credentials: { async resolve() { return undefined } },
+      credentials,
       settings,
       web: { registerSearchProvider(provider) { providers.push(provider); return () => providers.splice(providers.indexOf(provider), 1) } },
       connection: { rpc: { handle(path, handler, options) { handlers.set(path, { handler, options }) } } },
@@ -48,15 +48,15 @@ test('Host starts with no account plugin and provides search-chain/v1 before dyn
   const chain = world.provided.get(SEARCH_CHAIN_SERVICE)
   assert.ok(chain instanceof SearchChain)
   assert.equal(world.providers[0].id, 'subscription-search')
-  assert.deepEqual(chain.list().backends.map(entry => [entry.id, entry.registered]), [
+  assert.deepEqual((await chain.list()).backends.map(entry => [entry.id, entry.registered]), [
     ['chatgpt', false], ['grok', false], ['exa', true], ['deepseek', true],
   ])
 
   const unregister = chain.register({ id: 'chatgpt', label: 'ChatGPT account', async search() { return { sources: [], truncated: false } } })
-  assert.equal(chain.list().backends[0].registered, true)
+  assert.equal((await chain.list()).backends[0].registered, true)
   assert.deepEqual(await world.providers[0].search({ query: 'q' }), { sources: [], truncated: false })
   unregister()
-  assert.equal(chain.list().backends[0].registered, false)
+  assert.equal((await chain.list()).backends[0].registered, false)
 })
 
 test('Host search chain starts when the optional settings manager is absent', async () => {
@@ -64,10 +64,27 @@ test('Host search chain starts when the optional settings manager is absent', as
   apply(world.ctx)
   const chain = world.provided.get(SEARCH_CHAIN_SERVICE)
   assert.ok(chain instanceof SearchChain)
-  assert.deepEqual(chain.list().settings.order, ['chatgpt', 'grok', 'exa', 'deepseek'])
-  const response = await world.handlers.get('/subscription-search').handler('update-settings', { settings: chain.list().settings })
+  assert.deepEqual((await chain.list()).settings.order, ['chatgpt', 'grok', 'exa', 'deepseek'])
+  const response = await world.handlers.get('/subscription-search').handler('update-settings', { settings: (await chain.list()).settings })
   assert.equal(response.ok, false)
   assert.equal(response.error.code, 'internal')
+})
+
+test('built-in backends surface credential configuration through the status RPC', async () => {
+  const describeLog = []
+  const world = context(undefined, true, {
+    async describe(ref) { describeLog.push(ref); return { configured: ref === 'EXA_API_KEY' } },
+    async resolve() { throw new Error('status probes must not resolve values') },
+  })
+  apply(world.ctx)
+  const response = await world.handlers.get('/subscription-search').handler('status', {}, undefined)
+  assert.equal(response.ok, true)
+  assert.deepEqual(response.value.backends.map(entry => [entry.id, entry.availability]), [
+    ['chatgpt', 'unregistered'], ['grok', 'unregistered'],
+    ['exa', 'available'], ['deepseek', 'unavailable'],
+  ])
+  assert.deepEqual(describeLog, ['EXA_API_KEY', 'DEEPSEEK_API_KEY'])
+  assert.doesNotMatch(JSON.stringify(response), /status probes must not resolve/)
 })
 
 test('compatibility RPC is loopback, secret-free, and only status/settings/search forwarding', async () => {
@@ -105,12 +122,12 @@ test('versioned settings round-trip through the Host facade', async () => {
 
 test('failed settings persistence rolls the live chain back', async () => {
   const searchChain = new SearchChain()
-  const before = searchChain.list().settings
+  const before = (await searchChain.list()).settings
   const rpc = createRpcHandler({ searchChain, settings: { async update() { throw new Error('disk secret detail') } } })
   const response = await rpc('update-settings', { settings: { ...before, order: [...before.order].reverse() } })
   assert.equal(response.ok, false)
   assert.equal(response.error.code, 'internal')
-  assert.deepEqual(searchChain.list().settings, before)
+  assert.deepEqual((await searchChain.list()).settings, before)
   assert.doesNotMatch(JSON.stringify(response), /disk secret/)
 })
 

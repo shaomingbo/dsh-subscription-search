@@ -13,10 +13,24 @@ function chain(options = {}) {
   })
 }
 
+test('search-chain/v1 list stays synchronous while probe refreshes callable availability', async () => {
+  const searchChain = chain()
+  searchChain.register({ id: 'chatgpt', async status() { return { availability: 'available' } }, async search() { return result() } })
+
+  const before = searchChain.list()
+  assert.equal(typeof before?.then, 'undefined')
+  assert.equal(before.protocol, 'search-chain/v1')
+  assert.equal(before.backends[0].availability, 'unknown')
+
+  const refreshed = await searchChain.probe()
+  assert.equal(refreshed.backends[0].availability, 'available')
+  assert.equal(searchChain.list().backends[0].availability, 'available')
+})
+
 test('search-chain/v1 registration is live, replace-safe, and disposed by identity', async () => {
   const searchChain = chain()
   const firstDispose = searchChain.register(backend('chatgpt', async () => result('https://first.example/')))
-  assert.deepEqual(searchChain.list().backends.map(entry => [entry.id, entry.registered]), [
+  assert.deepEqual((await searchChain.list()).backends.map(entry => [entry.id, entry.registered]), [
     ['chatgpt', true], ['grok', false], ['exa', false], ['deepseek', false],
   ])
   assert.equal((await searchChain.search({ query: 'q' })).sources[0].url, 'https://first.example/')
@@ -25,13 +39,13 @@ test('search-chain/v1 registration is live, replace-safe, and disposed by identi
   firstDispose()
   assert.equal((await searchChain.search({ query: 'q' })).sources[0].url, 'https://second.example/')
   secondDispose()
-  assert.equal(searchChain.list().backends[0].registered, false)
+  assert.equal((await searchChain.list()).backends[0].registered, false)
 })
 
 test('new backend ids join the tail without changing the default order', async () => {
   const searchChain = chain({ settings: { enabled: { chatgpt: false, grok: false, exa: false, deepseek: false } } })
   searchChain.register(backend('custom', async () => result('https://custom.example/')))
-  assert.deepEqual(searchChain.list().settings.order, ['chatgpt', 'grok', 'exa', 'deepseek', 'custom'])
+  assert.deepEqual((await searchChain.list()).settings.order, ['chatgpt', 'grok', 'exa', 'deepseek', 'custom'])
   assert.equal((await searchChain.search({ query: 'q' })).sources[0].url, 'https://custom.example/')
 })
 
@@ -41,12 +55,12 @@ test('works without an account manager and follows ChatGPT → Grok → Exa → 
   searchChain.register(backend('exa', async () => { calls.push('exa'); throw Object.assign(new Error('secret=do-not-leak'), { code: 'UPSTREAM_503' }) }))
   searchChain.register(backend('deepseek', async () => { calls.push('deepseek'); return result() }))
 
-  assert.deepEqual(searchChain.list().backends.slice(0, 2).map(entry => [entry.id, entry.registered]), [
+  assert.deepEqual((await searchChain.list()).backends.slice(0, 2).map(entry => [entry.id, entry.registered]), [
     ['chatgpt', false], ['grok', false],
   ])
   assert.deepEqual(await searchChain.search({ query: 'q' }), result())
   assert.deepEqual(calls, ['exa', 'deepseek'])
-  assert.doesNotMatch(JSON.stringify(searchChain.list()), /do-not-leak/)
+  assert.doesNotMatch(JSON.stringify(await searchChain.list()), /do-not-leak/)
 })
 
 test('falls back after unavailable, failure, and per-leg timeout while preserving empty success', async () => {
@@ -62,7 +76,7 @@ test('falls back after unavailable, failure, and per-leg timeout while preservin
 
   assert.deepEqual(await searchChain.search({ query: 'q' }), { sources: [], truncated: false })
   assert.deepEqual(calls, ['grok', 'exa', 'deepseek'])
-  assert.deepEqual(searchChain.list().diagnostics.at(-1).attempts.map(entry => entry.status), [
+  assert.deepEqual((await searchChain.list()).diagnostics.at(-1).attempts.map(entry => entry.status), [
     'unavailable', 'error', 'timeout', 'empty',
   ])
 })
@@ -77,7 +91,7 @@ test('availability probing is inside the per-leg deadline and falls back', async
   searchChain.register(backend('grok', async () => { calls.push('grok'); return result('https://grok.example/') }))
   assert.equal((await searchChain.search({ query: 'q' })).sources[0].url, 'https://grok.example/')
   assert.deepEqual(calls, ['chatgpt-available', 'grok'])
-  assert.equal(searchChain.list().diagnostics.at(-1).attempts[0].status, 'timeout')
+  assert.equal((await searchChain.list()).diagnostics.at(-1).attempts[0].status, 'timeout')
 })
 
 test('total timeout aborts the active leg and does not continue fallback', async () => {
@@ -127,7 +141,7 @@ test('policy controls enabled/order/timeouts without exposing a DAG', async () =
   })
   assert.equal(value.sources[0].url, 'https://deepseek.example/')
   assert.deepEqual(calls, ['deepseek'])
-  assert.equal('dag' in searchChain.list().settings, false)
+  assert.equal('dag' in (await searchChain.list()).settings, false)
 })
 
 test('exhaustion and bounded diagnostics contain only stable codes and metadata', async () => {
@@ -140,7 +154,7 @@ test('exhaustion and bounded diagnostics contain only stable codes and metadata'
       return true
     })
   }
-  const status = searchChain.list()
+  const status = await searchChain.list()
   assert.equal(status.protocol, 'search-chain/v1')
   assert.equal(status.diagnostics.length, 2)
   assert.doesNotMatch(JSON.stringify(status), /private query|super-secret/)
@@ -153,4 +167,55 @@ test('invalid registration and requests fail at the public seam', async () => {
   assert.throws(() => searchChain.register({ id: 'bad id', search() {} }), /backend id/)
   await assert.rejects(searchChain.search({ query: '' }), error => error.code === 'SEARCH_INVALID_REQUEST')
   await wait(0)
+})
+
+test('probe refreshes backend status concurrently and reports only stable values', async () => {
+  const searchChain = chain()
+  let started = 0
+  let release
+  const bothStarted = new Promise(resolve => { release = resolve })
+  const status = availability => async () => {
+    started += 1
+    if (started === 2) release()
+    await bothStarted
+    return { availability }
+  }
+  searchChain.register({ id: 'chatgpt', status: status('available'), async search() { return result() } })
+  searchChain.register({ id: 'grok', status: status('unavailable'), async search() { return result() } })
+  searchChain.register({ id: 'exa', status: { availability: 'available' }, async search() { return result() } })
+  searchChain.register({
+    id: 'deepseek',
+    async status() { throw new Error('probe leaked secret-detail') },
+    async search() { return result() },
+  })
+  const statusView = await searchChain.probe()
+  assert.deepEqual(statusView.backends.map(entry => [entry.id, entry.availability]), [
+    ['chatgpt', 'available'], ['grok', 'unavailable'], ['exa', 'available'], ['deepseek', 'unknown'],
+  ])
+  assert.doesNotMatch(JSON.stringify(statusView), /secret-detail/)
+})
+
+test('a status probe that outlives its deadline reads as unknown without blocking', async () => {
+  const searchChain = new SearchChain({ settings: DEFAULT_SETTINGS, statusTimeoutMs: 10 })
+  searchChain.register({
+    id: 'chatgpt',
+    status(signal) {
+      return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }))
+    },
+    async search() { return result() },
+  })
+  searchChain.register({ id: 'grok', status: { availability: 'unavailable' }, async search() { return result() } })
+  const status = await searchChain.probe()
+  assert.equal(status.backends.find(entry => entry.id === 'chatgpt').availability, 'unknown')
+  assert.equal(status.backends.find(entry => entry.id === 'grok').availability, 'unavailable')
+})
+
+test('unregistered and unreporting backends keep their honest statuses', async () => {
+  const searchChain = chain()
+  searchChain.register({ id: 'exa', async search() { return result() } })
+  const status = await searchChain.list()
+  assert.deepEqual(status.backends.map(entry => [entry.id, entry.registered, entry.availability]), [
+    ['chatgpt', false, 'unregistered'], ['grok', false, 'unregistered'],
+    ['exa', true, 'unknown'], ['deepseek', false, 'unregistered'],
+  ])
 })

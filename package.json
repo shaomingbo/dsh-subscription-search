@@ -1,6 +1,6 @@
 {
   "name": "dsh-subscription-search",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Ordered, extensible web-search fallback chain for DeepSeek Harness.",
   "type": "module",
   "main": "lib/index.js",

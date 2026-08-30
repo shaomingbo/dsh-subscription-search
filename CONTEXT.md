@@ -17,5 +17,5 @@ This package owns SearchChain execution, built-in Exa/DeepSeek adapters, search 
 
 1. `search-chain/v1`: registration lifecycle, ordering, deadlines, fallback, cancellation, empty results, exhaustion, bounded diagnostics.
 2. Host composition/RPC: starts without account plugin, dynamic registration, scalar forwarding, secret-free payloads, versioned settings.
-3. Installer/package: atomic profile-manifest contract, fixed v1.0.0 source, rollback, lifecycle commands, and packed-file completeness.
+3. Installer/package: atomic profile-manifest contract, fixed v1.1.0 source, rollback, lifecycle commands, and packed-file completeness.
 4. Browser module source: chain/status/diagnostics only; no account, quota, credential, or composer-dock composition.

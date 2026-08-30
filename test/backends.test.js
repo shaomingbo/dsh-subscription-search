@@ -37,3 +37,36 @@ test('built-in credential failures expose only a stable code', async () => {
     return true
   })
 })
+
+test('status reports configuration through describe without touching the value', async () => {
+  for (const [create, ref] of [[createExaBackend, 'EXA_API_KEY'], [createDeepSeekBackend, 'DEEPSEEK_API_KEY']]) {
+    const probed = []
+    const backend = create({
+      credentials: {
+        async describe(queried) { probed.push(queried); return { configured: true, source: 'file' } },
+        async resolve() { throw new Error('resolve must not run for a status probe') },
+      },
+    })
+    assert.deepEqual(await backend.status(), { availability: 'available' })
+    assert.equal(await backend.available(), true)
+    assert.deepEqual(probed, [ref, ref])
+  }
+})
+
+test('status reads an unconfigured ref as unavailable and gates the leg', async () => {
+  const backend = createExaBackend({ credentials: { async describe() { return { configured: false } } } })
+  assert.deepEqual(await backend.status(), { availability: 'unavailable' })
+  assert.equal(await backend.available(), false)
+})
+
+test('status claims nothing when the host exposes no describe seam', async () => {
+  const backend = createExaBackend({ credentials: {} })
+  assert.equal((await backend.status()).availability, undefined)
+  assert.equal(await backend.available(), true)
+})
+
+test('status of a throwing describe stays a non-event', async () => {
+  const backend = createExaBackend({ credentials: { async describe() { throw new Error('vault secret leaked') } } })
+  assert.equal((await backend.status()).availability, undefined)
+  assert.equal(await backend.available(), true)
+})
