@@ -1,157 +1,39 @@
 # dsh-subscription-search
 
-ChatGPT / Grok subscription OAuth, model routes, and an ordered **ChatGPT → Grok → Exa → DeepSeek** web-search fallback for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness).
-
-This is a **Host Cordis bundle** for the published `npx @deepseek-ai/dsh` installation. It owns its own device-code login (no Codex/Grok CLI `auth.json`), keeps tokens in `$DSH_HOME/.oauth.json` (owner-only), synchronizes fresh access tokens into DSH's credential service, and provisions pi-ai model routes through the settings service without replacing your other providers.
-
-It does not contain, upload, or commit any token.
-
-## What you get
-
-| Capability | Detail |
-|---|---|
-| ChatGPT login | Device-code sign-in under **Settings → Search** |
-| Grok login | Device-code sign-in under **Settings → Search** (accepts `auth.x.ai` / `accounts.x.ai` / `x.com` verification) |
-| Model routes | `openai-codex` (ChatGPT subscription) and `grok-build` (Grok 4.6, reasoning off/low/medium/high/xhigh) |
-| Web search chain | ChatGPT → Grok → Exa → DeepSeek, each with a 60s attempt budget and a 250s tool budget |
-| Search settings panel | Chain status table, subscription connect/disconnect, weekly usage, Exa API key input |
-| Weekly usage | ChatGPT (Codex) and Grok remaining weekly allowance, shown on the subscription cards and under the composer |
-
-## Requirements
-
-- Node.js 22.19 or later
-- A DSH installation via `npx @deepseek-ai/dsh` (web profile)
-- ChatGPT Plus/Pro or SuperGrok/X Premium subscription for the subscription legs
+Search-only `dsh-subscription-search@1.0.0` for DeepSeek Harness. It keeps the repository/package identity and DSH web provider id `subscription-search`, but no longer owns OAuth, credentials, subscription usage, model routes, quota UI, or API-key entry.
 
 ## Install
 
-```bash
-npx --yes github:shaomingbo/dsh-subscription-search#v0.1.6
+```sh
+npx --yes github:shaomingbo/dsh-subscription-search#v1.0.0
 ```
 
-Bare `npx` runs `install`. The installer edits exactly two manifest fields — its own `dependencies` entry and its own `dsh.profile.bundles` entry — and then runs `pnpm install --ignore-scripts` in the profile. It never touches `settings.yaml`, other bundles, `node_modules` symlinks, or any credential store (`.oauth.json`, credentials refs).
+The no-argument command installs into the `web` profile. It changes only `dependencies.dsh-subscription-search` and `dsh.profile.bundles`, runs `pnpm install --ignore-scripts`, and never restarts DSH. Then manually restart DSH and force-refresh the existing Web GUI.
 
-Repeat runs are idempotent, and a failed dependency install restores the previous manifest.
-
-#### Legacy-state blocking
-
-Superseded state from the CLI-auth bridges blocks the install until you migrate by hand:
-
-- `dsh-codex-auth-bridge` / `dsh-grok-build-auth-bridge` bundles still in the profile manifest;
-- bridge-owned `grok-build` / `openai-codex` routes still present in `~/.dsh/settings.yaml`;
-- workspace symlinks to a DSH checkout in the profile `node_modules` (a checkout copy of the Models page calls `providerAuth` RPCs the published host does not expose).
-
-`status` reports each of these facts; `install` refuses to run and prints the manual migration steps. `status` and the configured-provider checks never touch the network, and no installer command reads or writes the OAuth store.
-
-### Status and uninstall
-
-```bash
-# Whether (and how) the plugin is present in a profile
-npx --yes github:shaomingbo/dsh-subscription-search#v0.1.6 status
-
-# Remove the dependency reference, the bundle entry, and the installed copy
-npx --yes github:shaomingbo/dsh-subscription-search#v0.1.6 uninstall
+```sh
+npx --yes github:shaomingbo/dsh-subscription-search#v1.0.0 status
+npx --yes github:shaomingbo/dsh-subscription-search#v1.0.0 uninstall
+npx --yes github:shaomingbo/dsh-subscription-search#v1.0.0 install --profile web
 ```
 
-`status` exits non-zero when the plugin is absent or only partially installed; `uninstall` is idempotent. Both accept the same flags as `install`.
+Local development:
 
-All commands default to the `web` profile; pass `--profile <name>` for another one, or `--source <spec>` to install from a different package source. Local development uses `link:` directly:
-
-```bash
-npx --yes github:shaomingbo/dsh-subscription-search#v0.1.6 --source link:/absolute/path/to/checkout
+```sh
+DSH_SUBSCRIPTION_SEARCH_SOURCE="link:$PWD" node ./bin/install.js install --profile web
 ```
 
-Restart `npx @deepseek-ai/dsh web`, open **Settings → Search**, and sign in with ChatGPT and Grok. The model picker then lists the ChatGPT models and `grok-4.6`; `web_search` tries the chain in order.
+Manual fallback: add `"dsh-subscription-search": "github:shaomingbo/dsh-subscription-search#v1.0.0"` to the target profile's dependencies, add `dsh-subscription-search` to `dsh.profile.bundles`, then run `pnpm install --ignore-scripts` in that profile. Prefer the installer because it is atomic and rolls back dependency-install failures.
 
-Alternative installation (official plugin path):
+## Search chain
 
-```bash
-dsh plugin --profile web add github:shaomingbo/dsh-subscription-search#v0.1.6
-```
+The Host provides the Cordis service `searchChain`, implementing protocol `search-chain/v1`:
 
-## How it works
+- `register(backend) -> disposer`
+- `list() ->` secret-free settings, backend status, and bounded diagnostics
+- `search(request, policy?, signal)`
 
-### Login
+Default order: ChatGPT → Grok → Exa → DeepSeek. Exa and DeepSeek are built in and resolve `EXA_API_KEY` and `DEEPSEEK_API_KEY` through ordinary DSH credential refs. ChatGPT and Grok are optional callable adapters dynamically registered by an account plugin; this package starts and searches without that plugin.
 
-The plugin runs pi-ai's device-code OAuth flow for `openai-codex` and `xai`. The verification URL is validated against a hardcoded HTTPS origin allowlist before it is shown. Credentials persist in `$DSH_HOME/.oauth.json` with mode `0600` (directory `0700`), written atomically. Nothing secret crosses the browser channel: the UI only ever receives the login id, the validated verification URL, the one-time code, and a secret-free status.
+The chain owns ordering, enabled flags, per-backend and total deadlines, fallback, cancellation, empty-result success, and diagnostics. Settings are version 1; there is no DAG. Manage credentials in **Accounts & Usage**. The Search settings section only manages chain policy and shows status/diagnostics.
 
-### Model routes
-
-Routes are provisioned through `ctx.settings.update('llm-pi-ai', { providers: ... })`, which merges per provider — your existing `superacme` / `ollama` / `anthropic` sections stay untouched.
-
-- `openai-codex`: keyless profile, so pi-ai uses its native `openai-codex-responses` transport with the synchronized access token.
-- `grok-build`: `api: openai-responses`, `baseURL: https://api.x.ai/v1`, `apiKeyEnv: GROK_BUILD_ACCESS_TOKEN`, with `grok-4.6` declared including `xhigh → high` reasoning dispatch.
-
-Before any `openai-codex` / `grok-build` stream, the plugin resolves the current OAuth token (refreshing an expired one under the store lock) and synchronizes it into the credential reference. A 10-minute background timer keeps the credential warm.
-
-### Search
-
-The plugin registers one `WebSearchProvider` id `subscription-search` and switches the `web` row's `searchProvider` to it. The provider internally tries, in order:
-
-1. **ChatGPT** — Codex Responses (`chatgpt.com/backend-api/codex/responses`) with native `web_search`, OAuth bearer + account selector;
-2. **Grok** — xAI Responses (`api.x.ai/v1/responses`) with native `web_search`, OAuth bearer;
-3. **Exa** — `api.exa.ai/search` with highlights, via `EXA_API_KEY`;
-4. **DeepSeek** — Anthropic-compatible Messages (`api.deepseek.com/anthropic/v1/messages`) with the `web_search` server tool, via `DEEPSEEK_API_KEY` (shared with the DeepSeek model route).
-
-An unavailable provider is skipped, a failure or 60s timeout continues to the next, caller cancellation stops immediately, and an empty result counts as success. Exhaustion raises a bounded error containing only provider ids, statuses, and safe codes.
-
-`tool-web` is patched to `fetch: false` and `searchTimeoutMs: 250000` (four 60s attempts plus switching overhead).
-
-### Weekly usage
-
-When a subscription is connected, the host asks ChatGPT and Grok for the current weekly allowance (Codex also reports its 5-hour window) and returns only percentages and reset times. The Settings → Search cards show the detail; a compact readout sits under the composer next to the shipped stats line. Failures stay on that row and never include tokens, account ids, or upstream error bodies.
-
-## Environment overrides
-
-| Variable | Default | Purpose |
-|---|---|---|
-| `DSH_SUBSCRIPTION_SEARCH_SOURCE` | `github:shaomingbo/dsh-subscription-search#v0.1.6` | Installer package source |
-| `DSH_HOME` | `~/.dsh` | Harness home; `.oauth.json` lives here |
-
-## Security notes
-
-- Tokens stay in `$DSH_HOME/.oauth.json` (`0600`); only short-lived access tokens are copied into `$DSH_HOME/.credentials.yaml` through the normal credential service.
-- The loopback-only subscription channel rejects non-loopback clients; responses never include token values, account ids, or upstream error bodies.
-- Redirects are rejected on every credential-bearing search request.
-- If `OPENAI_CODEX_ACCESS_TOKEN` / `GROK_BUILD_ACCESS_TOKEN` are exported in the parent environment, they shadow the writable credential store. Unset them before starting DSH.
-
-## Troubleshooting
-
-### Login reports "country / region not supported"
-
-OpenAI rejects sign-ins from unsupported egress regions (`unsupported_country_region_territory`), and x.ai endpoints may hard-timeout — both happen when the DSH host process bypasses your proxy. The subtle part: **Node's `fetch` ignores `http_proxy` / `https_proxy` environment variables** unless the process opts in, so setting those vars alone does nothing for the host.
-
-Fixes (pick one):
-
-```bash
-# 1. Recommended: make undici honor your proxy environment variables
-NODE_USE_ENV_PROXY=1 npx @deepseek-ai/dsh web
-```
-
-2. Or enable your client's TUN mode (transparent routing). Field-tested caveats:
-   - After toggling TUN, verify it actually took over: compare `curl ipinfo.io` output with and without proxy env vars.
-   - In real-ip mode, per-domain rules never see the hostname; add `DOMAIN-SUFFIX,x.ai` / `DOMAIN-SUFFIX,xai.com` to a proxy group and enable the sniffer (or fake-ip DNS), otherwise auth.x.ai still times out while auth.openai.com works.
-
-Windows (PowerShell) equivalent of option 1: `$env:NODE_USE_ENV_PROXY="1"; npx @deepseek-ai/dsh web`.
-
-Failure envelopes make this diagnosable on their own now: messages carry an `upstream:` detail (e.g. `[PI_AI_AUTH_LOGIN_FAILED] … upstream: … status 403 {…}` or `could not reach the auth endpoint (UND_ERR_CONNECT_TIMEOUT)`), and the full stack is logged by the host process.
-
-## Migrating from the CLI-auth bridges
-
-If you previously installed `dsh-codex-auth-bridge` or `dsh-grok-build-auth-bridge`, install is blocked until you remove them by hand. The old CLI `auth.json` files are no longer read; sign in again under Settings → Search. Remove the now-unused dependencies and bundle entries:
-
-```bash
-dsh plugin --profile web remove dsh-codex-auth-bridge dsh-grok-build-auth-bridge
-```
-
-## Development
-
-```bash
-npm install
-npm test
-npm run check
-```
-
-## License
-
-MIT
+See [`SPEC.md`](SPEC.md) and [`CONTEXT.md`](CONTEXT.md).

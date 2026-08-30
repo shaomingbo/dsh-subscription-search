@@ -1,4 +1,4 @@
-import { test } from 'node:test'
+import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -6,40 +6,18 @@ import { fileURLToPath } from 'node:url'
 
 const root = dirname(fileURLToPath(new URL('../package.json', import.meta.url)))
 const client = readFileSync(join(root, 'lib/client.js'), 'utf8')
-const srcClient = readFileSync(join(root, 'src/client.js'), 'utf8')
 
-const CHINESE_CHROME = [
-  '搜索',
-  '网页搜索',
-  '搜索链',
-  '订阅搜索',
-  '已连接',
-  '未连接',
-  '断开连接',
-  '周剩余',
-  '刷新用量',
-]
-
-const HARDCODED_ENGLISH_CHROME = [
-  "h('h2', null, 'Web Search')",
-  "label: () => 'Search'",
-]
-
-test('search panel ships Chinese chrome for the default DSH locale', () => {
-  for (const phrase of CHINESE_CHROME) {
-    assert.match(client, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `missing Chinese chrome: ${phrase}`)
+test('search settings ships localized chain/status/diagnostics and Accounts & Usage direction', () => {
+  for (const phrase of ['网页搜索', '搜索链', '最近诊断', '账户与用量', 'Web Search', 'Search chain', 'Recent diagnostics', 'Accounts & Usage']) {
+    assert.match(client, new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
-})
-
-test('search panel binds DSH locale instead of hardcoding English titles', () => {
   assert.match(client, /locale\.register/)
   assert.match(client, /inject = \['slots', 'connection'\]/)
-  assert.equal(client.includes("inject = ['slots', 'connection', 'locale']"), false)
-  for (const snippet of HARDCODED_ENGLISH_CHROME) {
-    assert.equal(client.includes(snippet), false, `hardcoded English chrome still present: ${snippet}`)
-  }
 })
 
-test('src and lib client copies stay in sync', () => {
-  assert.equal(srcClient, client)
+test('active client composition contains no OAuth, subscription cards, quota dock, or credential input', () => {
+  for (const forbidden of [
+    'start-login', 'login-status', 'cancel-login', "'usage'", 'SubscriptionCard', 'UsageDock',
+    'conversation.composer.dock', 'credentials.set', 'type: \'password\'', 'EXA_API_KEY', 'DEEPSEEK_API_KEY',
+  ]) assert.equal(client.includes(forbidden), false, `legacy client composition remains: ${forbidden}`)
 })

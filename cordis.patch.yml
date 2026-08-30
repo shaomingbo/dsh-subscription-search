@@ -1,9 +1,5 @@
-# DSH host bundle: ChatGPT/Grok subscription OAuth, model routes, and the
-# ordered ChatGPT → Grok → Exa → DeepSeek search chain. The plugin owns its
-# own device-code login (stored in $DSH_HOME/.oauth.json), synchronizes fresh
-# access tokens into the ordinary credentials seam, provisions pi-ai model
-# routes through the settings service (per-provider merge, never a whole-config
-# replacement), and registers one internal-chain web search provider.
+# Search-only DSH bundle. The Host owns search-chain/v1 and retains the scalar
+# dsh-web provider id `subscription-search` as a forwarding adapter.
 
 - id: web
   config:

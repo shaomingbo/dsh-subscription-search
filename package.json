@@ -1,11 +1,12 @@
 {
   "name": "dsh-subscription-search",
-  "version": "0.1.8",
-  "description": "ChatGPT/Grok subscription OAuth login, model routes, and ChatGPT \u2192 Grok \u2192 Exa \u2192 DeepSeek web-search fallback for DeepSeek Harness.",
+  "version": "1.0.0",
+  "description": "Ordered, extensible web-search fallback chain for DeepSeek Harness.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
+    "./search-chain": "./lib/search-chain.js",
     "./client": "./lib/client.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
@@ -19,6 +20,8 @@
     "lib",
     "README.md",
     "README.zh.md",
+    "SPEC.md",
+    "CONTEXT.md",
     "LICENSE"
   ],
   "scripts": {
@@ -50,11 +53,9 @@
     "deepseek-harness",
     "dsh",
     "cordis",
-    "chatgpt",
-    "grok",
-    "xai",
-    "oauth",
-    "subscription",
+    "search-chain",
+    "exa",
+    "deepseek",
     "web-search"
   ],
   "author": "shaomingbo",
@@ -63,6 +64,7 @@
     "node": ">=22.19.0"
   },
   "dependencies": {
-    "@earendil-works/pi-ai": "^0.82.1"
+    "@deepseek-ai/dsh-settings": "0.1.1-rc.2",
+    "@deepseek-ai/schemastery": "3.18.1"
   }
 }
