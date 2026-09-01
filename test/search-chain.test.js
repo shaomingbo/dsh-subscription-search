@@ -17,7 +17,7 @@ test('search-chain/v1 registration is live, replace-safe, and disposed by identi
   const searchChain = chain()
   const firstDispose = searchChain.register(backend('chatgpt', async () => result('https://first.example/')))
   assert.deepEqual(searchChain.list().backends.map(entry => [entry.id, entry.registered]), [
-    ['chatgpt', true], ['grok', false], ['exa', false], ['deepseek', false],
+    ['chatgpt', true], ['grok', false], ['ollama', false], ['exa', false], ['deepseek', false],
   ])
   assert.equal((await searchChain.search({ query: 'q' })).sources[0].url, 'https://first.example/')
 
@@ -31,11 +31,11 @@ test('search-chain/v1 registration is live, replace-safe, and disposed by identi
 test('new backend ids join the tail without changing the default order', async () => {
   const searchChain = chain({ settings: { enabled: { chatgpt: false, grok: false, exa: false, deepseek: false } } })
   searchChain.register(backend('custom', async () => result('https://custom.example/')))
-  assert.deepEqual(searchChain.list().settings.order, ['chatgpt', 'grok', 'exa', 'deepseek', 'custom'])
+  assert.deepEqual(searchChain.list().settings.order, ['chatgpt', 'grok', 'ollama', 'exa', 'deepseek', 'custom'])
   assert.equal((await searchChain.search({ query: 'q' })).sources[0].url, 'https://custom.example/')
 })
 
-test('works without an account manager and follows ChatGPT → Grok → Exa → DeepSeek order', async () => {
+test('works without an account manager and follows ChatGPT → Grok → Ollama → Exa → DeepSeek order', async () => {
   const calls = []
   const searchChain = chain()
   searchChain.register(backend('exa', async () => { calls.push('exa'); throw Object.assign(new Error('secret=do-not-leak'), { code: 'UPSTREAM_503' }) }))
@@ -63,7 +63,7 @@ test('falls back after unavailable, failure, and per-leg timeout while preservin
   assert.deepEqual(await searchChain.search({ query: 'q' }), { sources: [], truncated: false })
   assert.deepEqual(calls, ['grok', 'exa', 'deepseek'])
   assert.deepEqual(searchChain.list().diagnostics.at(-1).attempts.map(entry => entry.status), [
-    'unavailable', 'error', 'timeout', 'empty',
+    'unavailable', 'error', 'unavailable', 'timeout', 'empty',
   ])
 })
 
@@ -145,7 +145,7 @@ test('exhaustion and bounded diagnostics contain only stable codes and metadata'
   assert.equal(status.diagnostics.length, 2)
   assert.doesNotMatch(JSON.stringify(status), /private query|super-secret/)
   assert.equal(status.backends.find(entry => entry.id === 'exa').label, 'Exa')
-  assert.ok(status.diagnostics.every(entry => entry.attempts.length <= 4))
+  assert.ok(status.diagnostics.every(entry => entry.attempts.length <= 5))
 })
 
 test('invalid registration and requests fail at the public seam', async () => {

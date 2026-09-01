@@ -8,7 +8,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const PACKAGE_NAME = 'dsh-subscription-search'
-const DEFAULT_SOURCE = 'github:shaomingbo/dsh-subscription-search#v1.0.0'
+const DEFAULT_SOURCE = 'github:shaomingbo/dsh-subscription-search#v1.2.0'
 const COMMANDS = ['install', 'status', 'uninstall']
 
 function parseArgs(argv) {
@@ -36,7 +36,7 @@ function printHelp() {
     + '  uninstall   Remove this dependency reference and Cordis bundle entry.\n\n'
     + 'Flags:\n'
     + '  --profile   Target profile under $DSH_HOME/profiles (default: web).\n'
-    + '  --source    Package spec to install (default: fixed v1.0.0 release).\n'
+    + '  --source    Package spec to install (default: fixed v1.2.0 release).\n'
     + '  -h, --help  Show this help.')
 }
 

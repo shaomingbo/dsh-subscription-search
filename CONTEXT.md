@@ -11,11 +11,11 @@
 
 ## Ownership
 
-This package owns SearchChain execution, built-in Exa/DeepSeek adapters, search settings/status/diagnostics UI, the `subscription-search` scalar provider adapter, and installer wiring. It does not own accounts, OAuth, credential mutation, subscription usage, LLM routes, or quota presentation.
+This package owns SearchChain execution, built-in Exa/DeepSeek/Ollama adapters, search settings/status/diagnostics UI, the `subscription-search` scalar provider adapter, and installer wiring. It does not own accounts, OAuth, credential mutation, subscription usage, LLM routes, or quota presentation.
 
 ## Confirmed test seams
 
-1. `search-chain/v1`: registration lifecycle, ordering, deadlines, fallback, cancellation, empty results, exhaustion, bounded diagnostics.
-2. Host composition/RPC: starts without account plugin, dynamic registration, scalar forwarding, secret-free payloads, versioned settings.
-3. Installer/package: atomic profile-manifest contract, fixed v1.0.0 source, rollback, lifecycle commands, and packed-file completeness.
+1. `search-chain/v1`: registration lifecycle, ordering, deadlines, fallback, cancellation, empty results, exhaustion, bounded diagnostics, credential-gated availability.
+2. Host composition/RPC: starts without account plugin, dynamic registration, scalar forwarding, secret-free payloads, versioned settings, `credentials/reference-updated` badge refresh.
+3. Installer/package: atomic profile-manifest contract, fixed v1.2.0 source, rollback, lifecycle commands, and packed-file completeness.
 4. Browser module source: chain/status/diagnostics only; no account, quota, credential, or composer-dock composition.

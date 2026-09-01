@@ -106,7 +106,7 @@ test('fixed release source, --source override, profile flag, and help contract a
   const w = world()
   const help = run(w, ['--help'], { DSH_SUBSCRIPTION_SEARCH_SOURCE: '' })
   assert.equal(help.status, 0)
-  assert.match(help.output, /github:shaomingbo\/dsh-subscription-search#v1\.0\.0/)
+  assert.match(help.output, /github:shaomingbo\/dsh-subscription-search#v1\.2\.0/)
   assert.match(help.output, /--profile/)
   assert.match(help.output, /--source/)
 

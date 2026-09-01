@@ -7,6 +7,7 @@ function context(section, withSettings = true) {
   const providers = []
   const handlers = new Map()
   const disposal = []
+  const listeners = new Map()
   const settings = {
     value: section,
     updates: [],
@@ -32,7 +33,19 @@ function context(section, withSettings = true) {
       provide(id, value) { provided.set(id, value) },
       get(id) { return withSettings && id === 'settings' ? settings : undefined },
       inject(ids, callback) { if (withSettings && ids.includes('settings')) callback({ settings, effect() {}, fiber: { state: 1 } }) },
-      on(event, callback) { if (event === 'dispose') disposal.push(callback) },
+      on(event, callback) {
+        if (event === 'dispose') disposal.push(callback)
+        else {
+          if (!listeners.has(event)) listeners.set(event, [])
+          listeners.get(event).push(callback)
+        }
+        return () => {
+          const list = listeners.get(event) ?? []
+          const index = list.indexOf(callback)
+          if (index >= 0) list.splice(index, 1)
+        }
+      },
+      emit(event, arg) { for (const callback of listeners.get(event) ?? []) callback(arg) },
     },
     provided,
     providers,
@@ -49,7 +62,7 @@ test('Host starts with no account plugin and provides search-chain/v1 before dyn
   assert.ok(chain instanceof SearchChain)
   assert.equal(world.providers[0].id, 'subscription-search')
   assert.deepEqual(chain.list().backends.map(entry => [entry.id, entry.registered]), [
-    ['chatgpt', false], ['grok', false], ['exa', true], ['deepseek', true],
+    ['chatgpt', false], ['grok', false], ['ollama', true], ['exa', true], ['deepseek', true],
   ])
 
   const unregister = chain.register({ id: 'chatgpt', label: 'ChatGPT account', async search() { return { sources: [], truncated: false } } })
@@ -59,12 +72,38 @@ test('Host starts with no account plugin and provides search-chain/v1 before dyn
   assert.equal(chain.list().backends[0].registered, false)
 })
 
+test('Ollama participates only while OLLAMA_API_KEY is configured', async () => {
+  const world = context(undefined)
+  const secrets = new Map()
+  world.ctx.credentials = { async resolve(ref) { return secrets.has(ref) ? { value: secrets.get(ref) } : undefined } }
+  apply(world.ctx)
+  const chain = world.provided.get(SEARCH_CHAIN_SERVICE)
+  await new Promise(setImmediate)
+  assert.equal(chain.list().backends.find(entry => entry.id === 'ollama').availability, 'unavailable')
+
+  const response = await world.handlers.get('/subscription-search').handler('search', { query: 'q' }, undefined)
+  assert.equal(response.ok, false)
+  const attempts = chain.list().diagnostics.at(-1).attempts
+  assert.deepEqual(attempts.map(entry => entry.id), ['chatgpt', 'grok', 'ollama', 'exa', 'deepseek'])
+  assert.equal(attempts.find(entry => entry.id === 'ollama').status, 'unavailable')
+
+  world.ctx.emit('credentials/reference-updated', 'EXA_API_KEY')
+  await new Promise(setImmediate)
+  assert.equal(chain.list().backends.find(entry => entry.id === 'ollama').availability, 'unavailable')
+
+  secrets.set('OLLAMA_API_KEY', 'ollama-secret')
+  world.ctx.emit('credentials/reference-updated', 'OLLAMA_API_KEY')
+  await new Promise(setImmediate)
+  assert.equal(chain.list().backends.find(entry => entry.id === 'ollama').availability, 'available')
+  world.dispose()
+})
+
 test('Host search chain starts when the optional settings manager is absent', async () => {
   const world = context(undefined, false)
   apply(world.ctx)
   const chain = world.provided.get(SEARCH_CHAIN_SERVICE)
   assert.ok(chain instanceof SearchChain)
-  assert.deepEqual(chain.list().settings.order, ['chatgpt', 'grok', 'exa', 'deepseek'])
+  assert.deepEqual(chain.list().settings.order, ['chatgpt', 'grok', 'ollama', 'exa', 'deepseek'])
   const response = await world.handlers.get('/subscription-search').handler('update-settings', { settings: chain.list().settings })
   assert.equal(response.ok, false)
   assert.equal(response.error.code, 'internal')
@@ -92,8 +131,8 @@ test('versioned settings round-trip through the Host facade', async () => {
   const rpc = createRpcHandler({ searchChain, settings })
   const next = {
     version: 1,
-    enabled: { chatgpt: false, grok: true, exa: true, deepseek: false },
-    order: ['exa', 'grok', 'chatgpt', 'deepseek'],
+    enabled: { chatgpt: false, grok: true, ollama: true, exa: true, deepseek: false },
+    order: ['exa', 'grok', 'chatgpt', 'deepseek', 'ollama'],
     perLegTimeoutMs: 1234,
     totalTimeoutMs: 5678,
   }
