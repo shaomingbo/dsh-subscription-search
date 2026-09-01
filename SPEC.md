@@ -2,7 +2,7 @@
 
 ## Scope
 
-`dsh-subscription-search@1.1.0` is search-only. OAuth flows/stores, credential synchronization, subscription usage, model-route provisioning, subscription/quota UI, and credential input are out of scope.
+`dsh-subscription-search@1.3.0` is search-only. OAuth flows/stores, credential synchronization, subscription usage, model-route provisioning, subscription/quota UI, and credential input are out of scope.
 
 ## Host protocol
 
@@ -29,8 +29,8 @@ The chain tries enabled registered backends in order. Unregistered/unavailable, 
 ```json
 {
   "version": 1,
-  "enabled": { "chatgpt": true, "grok": true, "exa": true, "deepseek": true },
-  "order": ["chatgpt", "grok", "exa", "deepseek"],
+  "enabled": { "chatgpt": true, "grok": true, "ollama": true, "exa": true, "deepseek": true },
+  "order": ["chatgpt", "grok", "ollama", "exa", "deepseek"],
   "perLegTimeoutMs": 60000,
   "totalTimeoutMs": 240000
 }
@@ -40,4 +40,4 @@ No DAG is defined in v1.
 
 ## Adapters and compatibility
 
-Exa and DeepSeek adapters are built in and resolve ordinary credential refs. ChatGPT and Grok are not implemented or credentialed here; an optional account plugin dynamically registers callable adapters. The scalar dsh-web provider `subscription-search` forwards to the chain. `/subscription-search` is retained only as a loopback, secret-free status/settings/search facade.
+Exa, DeepSeek, and Ollama adapters are built in and resolve ordinary credential refs. Built-in legs gate on credential configuration through `describe` (the value never crosses the check): an unconfigured ref makes the leg unavailable and `search` is never entered, while an unreportable describe seam fails open to the search-time credential check. The Ollama adapter calls Ollama's hosted web search API and treats a 200 response lacking the documented `results` array (seen on exhausted quota, ollama#16045) as an invalid response that falls through; a well-formed empty array is a valid empty success. ChatGPT and Grok are not implemented or credentialed here; an optional account plugin dynamically registers callable adapters. The scalar dsh-web provider `subscription-search` forwards to the chain. `/subscription-search` is retained only as a loopback, secret-free status/settings/search facade.

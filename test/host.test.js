@@ -49,7 +49,7 @@ test('Host starts with no account plugin and provides search-chain/v1 before dyn
   assert.ok(chain instanceof SearchChain)
   assert.equal(world.providers[0].id, 'subscription-search')
   assert.deepEqual((await chain.list()).backends.map(entry => [entry.id, entry.registered]), [
-    ['chatgpt', false], ['grok', false], ['exa', true], ['deepseek', true],
+    ['chatgpt', false], ['grok', false], ['ollama', true], ['exa', true], ['deepseek', true],
   ])
 
   const unregister = chain.register({ id: 'chatgpt', label: 'ChatGPT account', async search() { return { sources: [], truncated: false } } })
@@ -64,7 +64,7 @@ test('Host search chain starts when the optional settings manager is absent', as
   apply(world.ctx)
   const chain = world.provided.get(SEARCH_CHAIN_SERVICE)
   assert.ok(chain instanceof SearchChain)
-  assert.deepEqual((await chain.list()).settings.order, ['chatgpt', 'grok', 'exa', 'deepseek'])
+  assert.deepEqual((await chain.list()).settings.order, ['chatgpt', 'grok', 'ollama', 'exa', 'deepseek'])
   const response = await world.handlers.get('/subscription-search').handler('update-settings', { settings: (await chain.list()).settings })
   assert.equal(response.ok, false)
   assert.equal(response.error.code, 'internal')
@@ -80,11 +80,29 @@ test('built-in backends surface credential configuration through the status RPC'
   const response = await world.handlers.get('/subscription-search').handler('status', {}, undefined)
   assert.equal(response.ok, true)
   assert.deepEqual(response.value.backends.map(entry => [entry.id, entry.availability]), [
-    ['chatgpt', 'unregistered'], ['grok', 'unregistered'],
+    ['chatgpt', 'unregistered'], ['grok', 'unregistered'], ['ollama', 'unavailable'],
     ['exa', 'available'], ['deepseek', 'unavailable'],
   ])
-  assert.deepEqual(describeLog, ['EXA_API_KEY', 'DEEPSEEK_API_KEY'])
+  assert.deepEqual(describeLog, ['EXA_API_KEY', 'DEEPSEEK_API_KEY', 'OLLAMA_API_KEY'])
   assert.doesNotMatch(JSON.stringify(response), /status probes must not resolve/)
+})
+
+test('the Ollama leg participates only while OLLAMA_API_KEY is configured', async () => {
+  const world = context(undefined, true, {
+    async describe(ref) { return { configured: ref === 'OLLAMA_API_KEY' } },
+    async resolve() { throw new Error('vault secret leaked') },
+  })
+  apply(world.ctx)
+  const searchChain = world.provided.get(SEARCH_CHAIN_SERVICE)
+  const response = await world.handlers.get('/subscription-search').handler('search', { query: 'q' }, undefined)
+  assert.equal(response.ok, false)
+  assert.deepEqual(searchChain.list().diagnostics.at(-1).attempts.map(entry => [entry.id, entry.status]), [
+    ['chatgpt', 'unavailable'], ['grok', 'unavailable'], ['ollama', 'error'], ['exa', 'unavailable'], ['deepseek', 'unavailable'],
+  ])
+  const status = await searchChain.probe()
+  assert.equal(status.backends.find(entry => entry.id === 'ollama').availability, 'available')
+  assert.doesNotMatch(JSON.stringify(status), /vault secret/)
+  world.dispose()
 })
 
 test('compatibility RPC is loopback, secret-free, and only status/settings/search forwarding', async () => {
@@ -109,8 +127,8 @@ test('versioned settings round-trip through the Host facade', async () => {
   const rpc = createRpcHandler({ searchChain, settings })
   const next = {
     version: 1,
-    enabled: { chatgpt: false, grok: true, exa: true, deepseek: false },
-    order: ['exa', 'grok', 'chatgpt', 'deepseek'],
+    enabled: { chatgpt: false, grok: true, ollama: true, exa: true, deepseek: false },
+    order: ['exa', 'grok', 'chatgpt', 'deepseek', 'ollama'],
     perLegTimeoutMs: 1234,
     totalTimeoutMs: 5678,
   }

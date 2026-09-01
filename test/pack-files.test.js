@@ -12,10 +12,10 @@ const REQUIRED = [
 ]
 const FORBIDDEN = ['lib/auth-runtime.js', 'lib/oauth-store.js', 'lib/credential-sync.js', 'lib/usage.js']
 
-test('package metadata is the search-only 1.1.0 identity with only settings dependencies', () => {
+test('package metadata is the search-only 1.3.0 identity with only settings dependencies', () => {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
   assert.equal(pkg.name, 'dsh-subscription-search')
-  assert.equal(pkg.version, '1.1.0')
+  assert.equal(pkg.version, '1.3.0')
   assert.deepEqual(pkg.dependencies, {
     '@deepseek-ai/dsh-settings': '0.1.1-rc.2',
     '@deepseek-ai/schemastery': '3.18.1',
