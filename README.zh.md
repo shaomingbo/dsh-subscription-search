@@ -5,15 +5,15 @@
 ## 安装
 
 ```sh
-npx --yes --ignore-scripts github:shaomingbo/dsh-subscription-search#v1.3.2
+npx --yes --ignore-scripts github:shaomingbo/dsh-subscription-search#v1.3.3
 ```
 
 无参数默认通过公开 `dsh plugin` CLI（`--ignore-scripts`）安装到 `web` profile。要求精确 `dsh` `0.1.2-alpha.3`、`0.1.2-rc.1` 或 `0.1.5-rc.1`。完成后请手动重启 DSH，并强制刷新现有 Web GUI。
 
 ```sh
-npx --yes --ignore-scripts github:shaomingbo/dsh-subscription-search#v1.3.2 status
-npx --yes --ignore-scripts github:shaomingbo/dsh-subscription-search#v1.3.2 uninstall
-npx --yes --ignore-scripts github:shaomingbo/dsh-subscription-search#v1.3.2 install --profile web
+npx --yes --ignore-scripts github:shaomingbo/dsh-subscription-search#v1.3.3 status
+npx --yes --ignore-scripts github:shaomingbo/dsh-subscription-search#v1.3.3 uninstall
+npx --yes --ignore-scripts github:shaomingbo/dsh-subscription-search#v1.3.3 install --profile web
 ```
 
 本地开发：

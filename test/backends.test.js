@@ -116,13 +116,11 @@ test('Ollama is available exactly while the credential resolves', async () => {
     credentials: { async resolve() { return stored === undefined ? undefined : { value: stored } } },
   })
   assert.equal(await backend.available(), false)
-  assert.equal(backend.status.availability, 'unknown')
-  await backend.refreshAvailability()
-  assert.equal(backend.status.availability, 'unavailable')
+  assert.equal((await backend.status()).availability, 'unavailable')
+  assert.equal(await backend.refreshAvailability(), 'unavailable')
   stored = 'key'
   assert.equal(await backend.available(), true)
-  await backend.refreshAvailability()
-  assert.equal(backend.status.availability, 'available')
+  assert.equal((await backend.status()).availability, 'available')
 })
 
 test('Ollama credential failures expose only a stable code', async () => {
@@ -132,4 +130,19 @@ test('Ollama credential failures expose only a stable code', async () => {
     assert.doesNotMatch(error.message, /vault secret/)
     return true
   })
+})
+
+test('built-in status badges use describe and never return the secret', async () => {
+  const described = []
+  const credentials = {
+    async describe(ref) {
+      described.push(ref)
+      return { configured: ref !== 'missing' }
+    },
+    async resolve() { throw new Error('status must not resolve secrets') },
+  }
+  assert.deepEqual(await createExaBackend({ credentials }).status(), { availability: 'available' })
+  assert.deepEqual(await createDeepSeekBackend({ credentials }).status(), { availability: 'available' })
+  assert.deepEqual(await createOllamaBackend({ credentials }).status(), { availability: 'available' })
+  assert.deepEqual(described, ['EXA_API_KEY', 'DEEPSEEK_API_KEY', 'OLLAMA_API_KEY'])
 })
