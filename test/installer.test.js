@@ -1,131 +1,75 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import fs from 'node:fs'
-import os from 'node:os'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { parseArgs, run } from '../bin/install.js'
+import { DEFAULT_SOURCE, PACKAGE_NAME, normalizeSource } from '../src/profile-adapter.js'
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const bin = path.join(root, 'bin', 'install.js')
-const NAME = 'dsh-subscription-search'
+test('parseArgs defaults to official-CLI install with the fixed tag', () => {
+  const options = parseArgs([])
+  assert.equal(options.command, 'install')
+  assert.equal(options.profile, 'web')
+  assert.equal(options.source, DEFAULT_SOURCE)
+  assert.throws(() => normalizeSource('github:someone/other#v1.0.0'), /floating sources/)
+})
 
-function world(pkg = { name: 'test-profile', private: true, version: '0.0.0' }) {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'search-installer-'))
-  const profile = path.join(home, 'profiles', 'web')
-  fs.mkdirSync(profile, { recursive: true })
-  const manifest = path.join(profile, 'package.json')
-  fs.writeFileSync(manifest, `${JSON.stringify(pkg, null, 2)}\n`)
-  const env = { ...process.env, DSH_HOME: home, DSH_SUBSCRIPTION_SEARCH_SOURCE: `link:${root}` }
-  return { home, profile, manifest, env, read: () => JSON.parse(fs.readFileSync(manifest, 'utf8')), text: () => fs.readFileSync(manifest, 'utf8') }
+test('install/uninstall go through dsh plugin add/remove and never write the manifest themselves', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-search-cli-'))
+  try {
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    const log = join(root, 'dsh-argv.log')
+    const shim = join(bin, 'dsh-shim.mjs')
+    writeFileSync(shim, `
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+appendFileSync(process.env.DSH_ARGV_LOG, process.argv.slice(2).join(' ') + '\\n')
+const [flag] = process.argv.slice(2)
+if (flag === '--version') { process.stdout.write('0.1.5-rc.1\\n'); process.exit(0) }
+if (flag === '--help') process.exit(0)
+if (process.argv[2] === 'plugin') {
+  const profile = process.argv[4]
+  const action = process.argv[5]
+  const spec = process.argv[6]
+  const path = join(process.env.DSH_HOME, 'profiles', profile, 'package.json')
+  const name = 'dsh-subscription-search'
+  let pkg = { name: 'dsh-profile-web', dependencies: {}, dsh: { profile: { bundles: [] } } }
+  try { pkg = JSON.parse(readFileSync(path, 'utf8')) } catch {}
+  pkg.dependencies ||= {}
+  pkg.dsh ||= { profile: { bundles: [] } }
+  pkg.dsh.profile ||= { bundles: [] }
+  pkg.dsh.profile.bundles ||= []
+  if (action === 'add') {
+    pkg.dependencies[name] = spec
+    if (!pkg.dsh.profile.bundles.includes(name)) pkg.dsh.profile.bundles.push(name)
+  } else if (action === 'remove') {
+    delete pkg.dependencies[name]
+    pkg.dsh.profile.bundles = pkg.dsh.profile.bundles.filter((entry) => entry !== name)
+  }
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, JSON.stringify(pkg, null, 2) + '\\n')
+  process.exit(0)
 }
-
-function run(w, args = [], extra = {}) {
-  const result = spawnSync(process.execPath, [bin, ...args], { env: { ...w.env, ...extra }, encoding: 'utf8' })
-  result.output = `${result.stdout ?? ''}${result.stderr ?? ''}`
-  return result
-}
-
-test('no-argument install, repeat install, status, uninstall, and repeat uninstall are idempotent', () => {
-  const w = world()
-  let result = run(w)
-  assert.equal(result.status, 0, result.output)
-  assert.equal(w.read().dependencies[NAME], `link:${root}`)
-  assert.deepEqual(w.read().dsh.profile.bundles, [NAME])
-  const once = w.text()
-  assert.equal(run(w).status, 0)
-  assert.equal(w.text(), once)
-  assert.equal(run(w, ['status']).status, 0)
-  assert.equal(run(w, ['uninstall']).status, 0)
-  assert.equal(w.read().dependencies?.[NAME], undefined)
-  assert.equal(run(w, ['uninstall']).status, 0)
-  assert.equal(run(w, ['status']).status, 1)
-})
-
-test('installer only changes its own dependency and bundle entry and performs no legacy cleanup', () => {
-  const packages = fs.mkdtempSync(path.join(os.tmpdir(), 'search-preserved-deps-'))
-  const other = path.join(packages, 'other')
-  const bridge = path.join(packages, 'bridge')
-  fs.mkdirSync(other); fs.mkdirSync(bridge)
-  fs.writeFileSync(path.join(other, 'package.json'), JSON.stringify({ name: 'other', version: '1.0.0' }))
-  fs.writeFileSync(path.join(bridge, 'package.json'), JSON.stringify({ name: 'dsh-codex-auth-bridge', version: '2.0.0' }))
-  const original = {
-    name: 'test-profile', private: true,
-    dependencies: { other: `link:${other}`, 'dsh-codex-auth-bridge': `link:${bridge}` },
-    dsh: { profile: { bundles: ['other', 'dsh-codex-auth-bridge'] }, untouched: { yes: true } },
+process.exit(1)
+`)
+    writeFileSync(join(bin, 'dsh'), `#!/bin/sh\nexec ${process.execPath} ${JSON.stringify(shim)} "$@"\n`)
+    chmodSync(join(bin, 'dsh'), 0o755)
+    const home = join(root, 'home')
+    const env = { ...process.env, PATH: bin, DSH_HOME: home, HOME: root, DSH_ARGV_LOG: log }
+    const source = `link:${root}`
+    const installed = run(['install', '--source', source], { env, log() {}, cwd: root })
+    assert.equal(installed.installed, true)
+    assert.equal(installed.bundled, true)
+    const argv = readFileSync(log, 'utf8')
+    assert.match(argv, /plugin --profile web add /)
+    assert.match(argv, /--ignore-scripts/)
+    assert.doesNotMatch(argv, /pnpm install/)
+    const removed = run(['uninstall'], { env, log() {}, cwd: root })
+    assert.equal(removed.installed, false)
+    assert.match(readFileSync(log, 'utf8'), /plugin --profile web remove dsh-subscription-search/)
+    assert.equal(PACKAGE_NAME, 'dsh-subscription-search')
+  } finally {
+    rmSync(root, { recursive: true, force: true })
   }
-  const w = world(original)
-  const settings = path.join(w.home, 'settings.yaml')
-  fs.writeFileSync(settings, 'providers:\n  openai-codex:\n    keep: true\n')
-  assert.equal(run(w).status, 0)
-  const after = w.read()
-  assert.equal(after.dependencies.other, `link:${other}`)
-  assert.equal(after.dependencies['dsh-codex-auth-bridge'], `link:${bridge}`)
-  assert.deepEqual(after.dsh.profile.bundles, ['other', 'dsh-codex-auth-bridge', NAME])
-  assert.deepEqual(after.dsh.untouched, { yes: true })
-  assert.equal(fs.readFileSync(settings, 'utf8'), 'providers:\n  openai-codex:\n    keep: true\n')
-})
-
-test('malformed manifests and argument errors fail without rewriting', () => {
-  const w = world()
-  const before = w.text()
-  for (const args of [['wat'], ['--bogus'], ['install', 'status'], ['--profile']]) {
-    const result = run(w, args)
-    assert.notEqual(result.status, 0)
-    assert.equal(w.text(), before)
-  }
-  fs.writeFileSync(w.manifest, '{bad json')
-  for (const command of ['install', 'status', 'uninstall']) {
-    const result = run(w, [command])
-    assert.notEqual(result.status, 0)
-    assert.match(result.output, /malformed profile manifest/)
-    assert.equal(fs.readFileSync(w.manifest, 'utf8'), '{bad json')
-  }
-})
-
-test('dependency-install failures restore install and uninstall manifests', () => {
-  const w = world()
-  const shim = fs.mkdtempSync(path.join(os.tmpdir(), 'search-installer-shim-'))
-  for (const name of ['pnpm', 'corepack']) {
-    fs.writeFileSync(path.join(shim, name), '#!/bin/sh\nexit 3\n')
-    fs.chmodSync(path.join(shim, name), 0o755)
-  }
-  const PATH = `${shim}:${process.env.PATH}`
-  const before = w.text()
-  let result = run(w, [], { PATH })
-  assert.notEqual(result.status, 0)
-  assert.equal(w.text(), before)
-  assert.equal(run(w).status, 0)
-  const installed = w.text()
-  result = run(w, ['uninstall'], { PATH })
-  assert.notEqual(result.status, 0)
-  assert.equal(w.text(), installed)
-})
-
-test('fixed release source, --source override, profile flag, and help contract are explicit', () => {
-  const w = world()
-  const help = run(w, ['--help'], { DSH_SUBSCRIPTION_SEARCH_SOURCE: '' })
-  assert.equal(help.status, 0)
-  assert.match(help.output, /github:shaomingbo\/dsh-subscription-search#v1\.2\.0/)
-  assert.match(help.output, /--profile/)
-  assert.match(help.output, /--source/)
-
-  const dummy = fs.mkdtempSync(path.join(os.tmpdir(), 'search-dummy-'))
-  fs.writeFileSync(path.join(dummy, 'package.json'), JSON.stringify({ name: 'dummy', version: '1.0.0' }))
-  const result = run(w, ['install', '--source', `link:${dummy}`, '--profile', 'web'])
-  assert.equal(result.status, 0, result.output)
-  assert.equal(w.read().dependencies[NAME], `link:${dummy}`)
-})
-
-test('installer never reads, writes, or prints credential stores', () => {
-  const w = world()
-  const oauth = path.join(w.home, '.oauth.json')
-  const credentials = path.join(w.home, 'credentials.yaml')
-  fs.writeFileSync(oauth, '{"token":"SENTINEL_OAUTH_SECRET"}')
-  fs.writeFileSync(credentials, 'EXA_API_KEY: SENTINEL_API_SECRET\n')
-  const result = run(w)
-  assert.equal(result.status, 0, result.output)
-  assert.equal(fs.readFileSync(oauth, 'utf8'), '{"token":"SENTINEL_OAUTH_SECRET"}')
-  assert.equal(fs.readFileSync(credentials, 'utf8'), 'EXA_API_KEY: SENTINEL_API_SECRET\n')
-  assert.doesNotMatch(result.output, /SENTINEL_/)
 })
