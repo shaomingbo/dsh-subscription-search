@@ -11,7 +11,7 @@ import { join, resolve } from 'node:path'
 export const PACKAGE_NAME = 'dsh-subscription-search'
 export const SUPPORTED_DSH_VERSIONS = Object.freeze(['0.1.2-alpha.3', '0.1.2-rc.1', '0.1.5-rc.1'])
 export const SUPPORTED_DSH_VERSION = SUPPORTED_DSH_VERSIONS[0]
-export const DEFAULT_SOURCE = 'github:shaomingbo/dsh-subscription-search#v1.3.1'
+export const DEFAULT_SOURCE = 'github:shaomingbo/dsh-subscription-search#v1.3.2'
 const CLI_GUIDANCE = `Install a tested @deepseek-ai/dsh launcher (${SUPPORTED_DSH_VERSIONS.join(' or ')}) and pnpm, put its dsh executable on PATH, then check dsh --version. No manifest fallback is available.`
 
 export function validateProfile(profile) {

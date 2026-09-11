@@ -115,9 +115,14 @@ test('compatibility RPC is loopback, secret-free, and only status/settings/searc
   const registration = world.handlers.get('/subscription-search')
   assert.deepEqual(registration.options, { authority: 'loopback' })
 
-  const status = await registration.handler('providers', {}, undefined)
+  const status = await registration.handler('status', {}, undefined)
   assert.equal(status.ok, true)
   assert.equal(status.value.protocol, 'search-chain/v1')
+  assert.ok(Array.isArray(status.value.backends))
+  assert.ok(status.value.settings)
+  const providers = await registration.handler('providers', {}, undefined)
+  assert.equal(providers.ok, true)
+  assert.equal(providers.value.protocol, 'search-chain/v1')
   assert.doesNotMatch(JSON.stringify(status), /accessToken|refreshToken|credentialValue|Bearer /i)
 
   const legacy = await registration.handler('start-login', { provider: 'openai-codex', token: 'top-secret' }, undefined)

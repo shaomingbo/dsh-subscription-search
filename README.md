@@ -5,15 +5,15 @@ Search-only `dsh-subscription-search@1.3.1` for DeepSeek Harness. It keeps the r
 ## Install
 
 ```sh
-npx --yes --ignore-scripts github:shaomingbo/dsh-subscription-search#v1.3.1
+npx --yes --ignore-scripts github:shaomingbo/dsh-subscription-search#v1.3.2
 ```
 
 The no-argument command installs into the `web` profile through the public `dsh plugin` CLI (`--ignore-scripts`). Requires exact `dsh` `0.1.2-alpha.3`, `0.1.2-rc.1`, or `0.1.5-rc.1`. Then manually restart DSH and force-refresh the existing Web GUI.
 
 ```sh
-npx --yes --ignore-scripts github:shaomingbo/dsh-subscription-search#v1.3.1 status
-npx --yes --ignore-scripts github:shaomingbo/dsh-subscription-search#v1.3.1 uninstall
-npx --yes --ignore-scripts github:shaomingbo/dsh-subscription-search#v1.3.1 install --profile web
+npx --yes --ignore-scripts github:shaomingbo/dsh-subscription-search#v1.3.2 status
+npx --yes --ignore-scripts github:shaomingbo/dsh-subscription-search#v1.3.2 uninstall
+npx --yes --ignore-scripts github:shaomingbo/dsh-subscription-search#v1.3.2 install --profile web
 ```
 
 Local development:
